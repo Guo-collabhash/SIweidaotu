@@ -207,11 +207,4 @@ app.get('/api/mindmaps', async (req, res) => {
   }
 });
 
-// 启动服务器
-app.listen(PORT, () => {
-  console.log(`服务器运行在 http://localhost:${PORT}`);
-  console.log('请确保在Supabase中创建了users表（用于认证）和mindmaps表（用于存储思维导图）');
-  console.log('users表字段：id、email、password、username');
-  console.log('mindmaps表字段：id、name、data(JSON)、user_id(可选)、created_at');
-  console.log('环境变量设置指南：请在.env文件中设置SUPABASE_URL和SUPABASE_ANON_KEY');
-});
+module.exports = app;
