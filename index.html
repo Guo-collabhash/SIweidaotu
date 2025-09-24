@@ -1,0 +1,2991 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>MindFlow — 极简强大的思维导图</title>
+    <style>
+        :root {
+            --bg: #0f1115;
+            --panel: #141821;
+            --muted: #2a2f3a;
+            --text: #e7ecf3;
+            --sub: #a9b3c7;
+            --accent: #5cc8ff;
+            --accent2: #8b5cf6;
+            --danger: #ff6b6b;
+            --ok: #22c55e;
+            --warn: #f59e0b;
+            --edge: #394150;
+            --shadow: 0 8px 24px rgba(0,0,0,.25);
+            --node-bg: #171b24;
+            --node-border: #2b3240;
+            --node-focus: #5cc8ff;
+            --tag-bg: #243042;
+            --tag-text: #b6c9ff;
+        }
+
+        [data-theme="light"] {
+            --bg: #f6f7fb;
+            --panel: #ffffff;
+            --muted: #e8ebf3;
+            --text: #0f1220;
+            --sub: #475069;
+            --accent: #2563eb;
+            --accent2: #7c3aed;
+            --danger: #dc2626;
+            --ok: #16a34a;
+            --warn: #d97706;
+            --edge: #c7d0e6;
+            --shadow: 0 8px 24px rgba(28,41,61,.15);
+            --node-bg: #ffffff;
+            --node-border: #dde3f2;
+            --node-focus: #2563eb;
+            --tag-bg: #e8efff;
+            --tag-text: #274690;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font: 14px/1.25 system-ui,Segoe UI,Roboto,Helvetica,Arial;
+        }
+
+        #app {
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            height: 100%;
+        }
+        /* 顶部工具栏 */
+        .toolbar {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            padding: 8px 10px;
+            background: var(--panel);
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 10
+        }
+
+        .btn, .seg > button, select, input[type="color"] {
+            border: 1px solid var(--muted);
+            background: transparent;
+            color: var(--text);
+            border-radius: 8px;
+            padding: 8px 10px;
+            cursor: pointer
+        }
+
+            .btn:hover, .seg > button:hover {
+                background: var(--muted)
+            }
+
+        .seg {
+            display: inline-flex;
+            border: 1px solid var(--muted);
+            border-radius: 10px;
+            overflow: hidden
+        }
+
+            .seg > button {
+                border: 0;
+                border-right: 1px solid var(--muted)
+            }
+
+                .seg > button:last-child {
+                    border-right: 0
+                }
+
+        .grow {
+            flex: 1
+        }
+
+        .kbd {
+            padding: .2em .5em;
+            border: 1px solid var(--muted);
+            border-radius: 6px;
+            color: var(--sub)
+        }
+
+        .divider {
+            width: 1px;
+            background: var(--muted);
+            height: 28px;
+            margin: 0 6px
+        }
+
+        .status {
+            color: var(--sub)
+        }
+        /* 画布与迷你地图 */
+        #stageWrap {
+            position: relative;
+            overflow: hidden;
+            background: repeating-conic-gradient(from 0deg at 50% 50%,transparent 0 25deg, #0000 25deg 50deg),radial-gradient(1200px 600px at 70% 20%,rgba(92,200,255,.05),transparent 45%);
+        }
+
+        #grid {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: linear-gradient(to right, var(--muted) 1px, transparent 1px) 0 0/40px 40px, linear-gradient(to bottom, var(--muted) 1px, transparent 1px) 0 0/40px 40px;
+            opacity: .15
+        }
+
+        svg {
+            width: 100%;
+            height: 100%
+        }
+
+        #minimap {
+            position: absolute;
+            right: 12px;
+            bottom: 12px;
+            width: 200px;
+            height: 140px;
+            background: var(--panel);
+            border: 1px solid var(--muted);
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+            overflow: hidden
+        }
+
+        #miniSvg {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom right, rgba(92,200,255,.08), transparent)
+        }
+
+        #miniViewport {
+            fill: rgba(140,180,255,.18);
+            stroke: var(--accent)
+        }
+        /* 节点视觉 */
+        .node {
+            cursor: default
+        }
+
+            .node rect {
+                fill: var(--node-bg);
+                stroke: var(--node-border);
+                stroke-width: 1.5;
+                rx: 10;
+                ry: 10;
+                filter: drop-shadow(0 6px 10px rgba(0,0,0,.25))
+            }
+
+            .node[data-selected="true"] rect {
+                stroke: var(--node-focus);
+                stroke-width: 2
+            }
+
+        rect.search-hit {
+            stroke: var(--accent2) !important;
+            stroke-width: 2.4px !important;
+        }
+        /* 搜索高亮（强制置顶） */
+        .node rect[style*="var(--accent2)"] {
+            stroke: var(--accent2) !important;
+            stroke-width: 2.4px !important;
+        }
+
+        .node .title {
+            font-weight: 600
+        }
+
+        .node .meta {
+            fill: var(--sub);
+            font-size: 11px
+        }
+
+        .badge {
+            font-size: 10px;
+            fill: var(--tag-text)
+        }
+
+        .badge-bg {
+            fill: var(--tag-bg);
+            rx: 6;
+            ry: 6
+        }
+
+        .collapse-hit {
+            cursor: pointer
+        }
+
+        .collapse-btn {
+            fill: var(--sub)
+        }
+
+        .edge {
+            stroke: var(--edge);
+            stroke-width: 2;
+            fill: none
+        }
+
+            .edge[data-highlight="true"] {
+                stroke: var(--accent)
+            }
+
+        #selectionBox {
+            stroke: var(--accent);
+            fill: rgba(92,200,255,.15);
+            stroke-dasharray: 4 4;
+            pointer-events: none
+        }
+        /* 底部 */
+        .footer {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            padding: 8px 10px;
+            background: var(--panel);
+            color: var(--sub)
+        }
+        /* 弹出面板 */
+        .floating {
+            position: absolute;
+            background: var(--panel);
+            border: 1px solid var(--muted);
+            border-radius: 12px;
+            padding: 10px;
+            box-shadow: var(--shadow);
+            z-index: 12;
+            min-width: 260px
+        }
+
+        .row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin: 6px 0
+        }
+
+            .row label {
+                width: 80px;
+                color: var(--sub)
+            }
+
+            .row input[type="text"], .row textarea, .row select {
+                flex: 1;
+                border: 1px solid var(--muted);
+                background: transparent;
+                color: var(--text);
+                border-radius: 8px;
+                padding: 8px
+            }
+
+            .row textarea {
+                height: 80px;
+                resize: vertical
+            }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            border: 1px solid var(--muted);
+            border-radius: 999px;
+            color: var(--sub);
+            cursor: pointer
+        }
+
+            .chip.active {
+                border-color: var(--accent);
+                color: var(--text)
+            }
+
+        .icon {
+            font-variation-settings: 'FILL' 1, 'opsz' 24, 'wght' 400;
+            font-family: 'Material Symbols Outlined', sans-serif;
+        }
+
+        @font-face {
+            font-family: "Material Symbols Outlined";
+            src: local("Material Symbols Outlined"), local("MaterialSymbolsOutlined");
+            unicode-range: U+E000-FFFF;
+        }
+
+        /* library overlay */
+        .libraryOverlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(6,8,12,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 60
+        }
+
+        .libraryBox {
+            width: 960px;
+            max-width: 96%;
+            background: var(--panel);
+            border: 1px solid var(--muted);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: var(--shadow);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            gap: 10px
+        }
+
+        .libraryHeader {
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .libraryList {
+            display: flex;
+            gap: 12px
+        }
+
+        .maps {
+            width: 320px;
+            border-right: 1px solid var(--muted);
+            padding-right: 12px;
+            max-height: 520px;
+            overflow: auto
+        }
+
+        .mapItem {
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid transparent;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer
+        }
+
+            .mapItem:hover {
+                background: rgba(255,255,255,0.02)
+            }
+
+            .mapItem.active {
+                border-color: var(--accent)
+            }
+
+        .mapMeta {
+            flex: 1
+        }
+
+        .mapActions {
+            display: flex;
+            gap: 6px
+        }
+
+        .mapPreview {
+            flex: 1;
+            padding-left: 12px;
+            max-height: 520px;
+            overflow: auto
+        }
+
+        .small {
+            font-size: 12px;
+            color: var(--sub)
+        }
+        /* 搜索高亮：仅对「未被选中」的节点生效 */
+        .node:not([data-selected="true"]) rect.search-hit {
+            stroke: var(--accent2) !important; /* 紫色 */
+            stroke-width: 2.4px !important;
+        }
+
+        /* 当前选中节点：保持蓝色，优先级最高 */
+        .node[data-selected="true"] rect {
+            stroke: var(--node-focus) !important;
+            stroke-width: 2px !important;
+        }
+
+        #btnAutoLayout.active {
+            background: var(--accent);
+            color: var(--bg);
+        }
+    </style>
+</head>
+<body data-theme="light">
+    <div id="libraryOverlay" class="libraryOverlay" style="display:none">
+        <div class="libraryBox" role="dialog" aria-label="我的思维导图库">
+            <div class="libraryHeader">
+                <h3 style="margin:0">我的导图</h3>
+                <div style="flex:1"></div>
+                <button class="btn" id="libNewBtn">新建导图</button>
+                <button class="btn" id="libImportBtn">导入JSON</button>
+                <button class="btn" id="libCloseBtn">关闭</button>
+                <input id="libFile" type="file" accept="application/json" hidden />
+            </div>
+            <div class="libraryList">
+                <div class="maps" id="mapsList"></div>
+                <div class="mapPreview" id="mapPreview">
+                    <div class="small">选中导图后可以查看预览、重命名、导出或删除。</div>
+                </div>
+            </div>
+            <div style="text-align:right" class="small">本地存储：浏览器（localStorage）。可创建、删除并打开导图。</div>
+        </div>
+    </div>
+
+    <div id="app">
+        <!-- 顶部工具栏 -->
+        <div class="toolbar">
+            <div class="seg">
+                <button id="btnFileMenu">文件 ▼</button>
+            </div>
+
+            <!-- 文件下拉浮层 -->
+            <div id="fileDropdown" class="floating" style="display:none;top:40px;left:10px;min-width:160px;">
+                <button class="btn" style="width:100%;" id="btnNew">新建</button>
+                <button class="btn" style="width:100%;" id="btnOpen">导入 JSON</button>
+                <button class="btn" style="width:100%;" id="btnSave">导出 JSON</button>
+                <button class="btn" style="width:100%;" id="btnSaveToDb">保存到数据库</button>
+                <button class="btn" style="width:100%;" id="btnLoadFromDb">从数据库导入</button>
+                <button class="btn" style="width:100%;" id="btnSvg">导出 SVG</button>
+                <button class="btn" style="width:100%;" id="btnPng">导出 PNG</button>
+                <button id="btnAISummary">AI 总结为导图</button><textarea id="aiInput" placeholder="粘贴文本或知识点..."></textarea>
+
+            </div>
+
+            <!-- 设置下拉浮层 -->
+            <div id="settingsDropdown" class="floating" style="display:none;top:40px;left:10px;min-width:160px;">
+                <label style="display:flex;align-items:center;gap:6px;padding:4px 8px;">
+                    <input type="checkbox" id="cbAutoLayout">
+                    自动整理
+                </label>
+            </div>
+            <!-- 自动整理开关 -->
+            <div class="">
+                <button id="btnAutoLayout" class="btn" title="展开/折叠时自动整理位置">自动整理</button>
+            </div>
+            <div class="divider"></div>
+            <div class="seg">
+                <button id="btnAddSibling">同级(Enter)</button>
+                <button id="btnAddParent">父级(F)</button>
+                <button id="btnAddChild">子级(Tab)</button>
+                <button id="btnDelete">删除(/)</button>
+                <button class="btn" id="btnOrphan">空白节点</button>
+            </div>
+            <div class="seg">
+                <button id="btnLayoutRight">布局: 右(1)</button>
+                <button id="btnLayoutBoth">左右(2)</button>
+                <button id="btnLayoutRadial">放射(3)</button>
+            </div>
+            <div class="seg">
+                <button id="btnUndo">撤销</button>
+                <button id="btnRedo">重做</button>
+            </div>
+            <div class="seg">
+                <button id="btnTheme">主题</button>
+                <button id="btnFit">自适应</button>
+                <button class="btn" id="btnSelMode">点选模式</button>
+                <button id="btnCenter">回到根</button>
+            </div>
+
+            <button class="btn" id="btnLibrary">我的导图</button>
+            <button class="btn" id="btnSaveMap">保存到库</button>
+
+            <input id="search" class="grow" placeholder="搜索节点（支持正则）…  (Ctrl/Cmd+F)" />
+            <!-- 界面 ▼ -->
+            <div class="seg">
+                <button id="UIMenu">界面 ▼</button>
+            </div>
+
+            <!-- 界面下拉浮层 -->
+            <div id="uiDropdown" class="floating" style="display:none;top:40px;left:10px;min-width:160px;">
+                <button class="btn" style="width:100%;" id="btnNoteUI">备注</button>
+                <button class="btn" style="width:100%;" id="btnLinkUI">链接</button>
+                <button class="btn" style="width:100%;" id="btnImageUI">图片</button>
+                <button class="btn" style="width:100%;" id="btnTaskUI">任务</button>
+                <button class="btn" style="width:100%;" id="btnTagUI">标签</button>
+                <button class="btn" style="width:100%;" id="btnStyleUI">样式</button>
+            </div>
+            <span class="status" id="status"></span>
+            <input id="fileOpen" type="file" accept="application/json" hidden />
+        </div>
+
+        <!-- 画布 -->
+        <div id="stageWrap">
+            <div id="grid"></div>
+            <svg id="stage">
+                <defs>
+                    <marker id="arrow" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto">
+                        <path d="M0,0 L10,4 L0,8 Z" fill="var(--edge)"></path>
+                    </marker>
+                </defs>
+                <g id="world" transform="translate(0,0) scale(1)">
+                    <g id="edges"></g>
+                    <g id="nodes"></g>
+                    <rect id="selectionBox" x="0" y="0" width="0" height="0" visibility="hidden"></rect>
+                </g>
+            </svg>
+            <!-- 迷你地图 -->
+            <div id="minimap">
+                <svg id="miniSvg">
+                    <g id="miniWorld"></g>
+                    <rect id="miniViewport"></rect>
+                </svg>
+            </div>
+        </div>
+
+        <!-- 底部 -->
+        <div class="footer">
+            <span>提示：按住<span class="kbd">默认不用按</span>拖动画布，<span class="kbd">/</span>删除节点，<span class="kbd">双击</span>编辑文本。</span>
+            <button class="btn" id="btnShortcuts" style="margin-left:12px;">快捷键帮助</button>
+            <span class="grow"></span>
+            <span id="footMeta"></span>
+
+        </div>
+    </div>
+
+    <!-- 浮动面板（复用） -->
+    <div id="panel" class="floating" style="display:none"></div>
+    <div id="shortcutsModal" class="libraryOverlay" style="display:none">
+        <div class="libraryBox" style="max-width:480px">
+            <h3 style="margin:0 0 10px">快捷键一览</h3>
+            <pre style="white-space:pre-wrap;font-size:13px;line-height:1.4">
+            Enter       新建同级节点
+            Tab         新建子节点
+            Shift+Tab   提升为父级节点
+            /           删除选中节点（含弹窗确认）
+            Space       折叠/展开节点
+            Ctrl+Z      撤销
+            Ctrl+Y / Ctrl+Shift+Z  重做
+            1           右侧布局
+            2           左右布局
+            3           放射布局
+            + / -       放大 / 缩小
+            R           重置选中节点到默认位置
+            .           锁定 / 解锁节点
+            Shift+D     切换删除模式
+            Esc         退出/解锁
+        </pre>
+            <div style="text-align:right;margin-top:10px">
+                <button class="btn" id="closeShortcuts">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+
+        /* ---------------------- 数据与工具 ---------------------- */
+        const $ = s => document.querySelector(s);
+        const $$ = s => Array.from(document.querySelectorAll(s));
+        const rndId = () => Math.random().toString(36).slice(2, 9);
+        const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+        const deepCopy = obj => JSON.parse(JSON.stringify(obj));
+        const nowStr = () => new Date().toLocaleString();
+
+        const LIB_KEY = 'mindflow_maps_v1';
+
+        const appState = {
+
+            layout: 'right', // right | both | radial
+            theme: 'dark',
+            scale: 1, tx: 0, ty: 0,
+            selected: new Set(),
+            hovered: null,
+            editing: null,
+            dragging: null,
+            marquee: null,
+            history: { past: [], future: [] },
+            searchRe: null,
+            currentMapId: null,
+            lockNodes: false,   // 新增：锁定节点
+            // 放在 appState 任意位置
+            imageDragging: null,   // { node, startX, startY }
+            deleteMode: 'all',   // 'all' | 'keep'   默认全删
+            manualLayout: new Set(), // 记录哪些节点被手动拖放过
+            selectMode: 'point',   // point | box
+            orphanNodes: [],        // 保存所有空白节点
+            awaitingParent: null,   // 记录当前正在等待新父节点的子节点 id
+
+            marquee: null,          // 保留框矩形
+            marqueeDrag: null,      // 框整体拖动
+            /* ------------------- 在 appState 里增加 ------------------- */
+            viewMemory: {},               // 结构：{ nodeId: { collapsedTx, collapsedTy, collapsedScale, expandedTx, expandedTy, expandedScale } }
+
+        };
+
+        /* 默认模型 */
+        let model = {
+            id: 'root',
+            text: '中心主题',
+            collapsed: false,
+            x: 0, y: 0,
+            style: { fill: '#ffffff', bg: null, border: null, w: 0, h: 0, icon: '🧠', shape: 'round' },
+            meta: { note: '双击节点以编辑；Tab 创建子节点；Enter 创建同级。', link: '', img: '', task: false, progress: 0, priority: 0, tags: [] },
+            children: [
+                { id: rndId(), text: '分支A', children: [], collapsed: false, style: {}, meta: { tags: ['起步'] } },
+                { id: rndId(), text: '分支B', children: [], collapsed: false, style: {}, meta: { tags: ['重要'] } },
+            ]
+        };
+
+        /* ---------------------- 库（localStorage） ---------------------- */
+        function loadLibrary() {
+            try {
+                const raw = localStorage.getItem(LIB_KEY);
+                if (!raw) return [];
+                return JSON.parse(raw);
+            } catch (e) { console.error(e); return []; }
+        }
+        function saveLibrary(list) {
+            localStorage.setItem(LIB_KEY, JSON.stringify(list));
+        }
+        function renderLibrary() {
+            const lib = loadLibrary();
+            const listEl = $('#mapsList');
+            listEl.innerHTML = '';
+            lib.forEach(m => {
+                const div = document.createElement('div'); div.className = 'mapItem'; div.dataset.id = m.id;
+                const md = document.createElement('div'); md.className = 'mapMeta';
+                md.innerHTML = `<div style="font-weight:600">${escapeHtml(m.name || ('未命名-' + m.id))}</div><div class="small">${new Date(m.updated || m.created).toLocaleString()}</div>`;
+                const actions = document.createElement('div'); actions.className = 'mapActions';
+                const openBtn = document.createElement('button'); openBtn.className = 'btn'; openBtn.textContent = '打开';
+                const exportBtn = document.createElement('button'); exportBtn.className = 'btn'; exportBtn.textContent = '导出';
+                const delBtn = document.createElement('button'); delBtn.className = 'btn'; delBtn.textContent = '删除';
+                const renameBtn = document.createElement('button'); renameBtn.className = 'btn'; renameBtn.textContent = '重命名';
+                actions.appendChild(openBtn); actions.appendChild(exportBtn); actions.appendChild(renameBtn); actions.appendChild(delBtn);
+                div.appendChild(md); div.appendChild(actions);
+                openBtn.addEventListener('click', () => { openMap(m.id); });
+                exportBtn.addEventListener('click', () => { exportMap(m.id); });
+                renameBtn.addEventListener('click', () => { const n = prompt('重命名', m.name || ''); if (n != null) { m.name = n; m.updated = Date.now(); saveLibrary(lib); renderLibrary(); } });
+                delBtn.addEventListener('click', () => { if (confirm('删除导图“' + (m.name || '未命名') + '”？')) { const idx = lib.findIndex(x => x.id === m.id); if (idx >= 0) { lib.splice(idx, 1); saveLibrary(lib); renderLibrary(); $('#mapPreview').innerHTML = ''; } } });
+                div.addEventListener('click', (e) => {
+                    if (e.target === div) { // 点击外壳也选中
+                        // 显示预览
+                        $('#mapsList .mapItem').forEach(it => it.classList.remove('active'));
+                        div.classList.add('active');
+                        showPreview(m);
+                    }
+                });
+                listEl.appendChild(div);
+            });
+            if (lib.length) { // 自动选中第一个
+                const first = lib[0];
+                $('#mapsList .mapItem')?.[0]?.click?.();
+            } else {
+                $('#mapPreview').innerHTML = '<div class="small">暂无导图，点击“新建导图”开始。</div>';
+            }
+        }
+        function showPreview(m) {
+            const el = $('#mapPreview');
+            const title = `<div style="font-weight:700;margin-bottom:8px">${escapeHtml(m.name || '未命名')}</div>`;
+            const meta = `<div class="small">创建：${new Date(m.created).toLocaleString()} · 更新：${new Date(m.updated || m.created).toLocaleString()}</div>`;
+            let preview = '';
+            try {
+                preview = '<pre style="white-space:pre-wrap;background:transparent;border-radius:8px;padding:8px;margin-top:8px;color:var(--sub);">' + escapeHtml(JSON.stringify(m.model?.text ? { root: m.model.text, children: (m.model.children || []).slice(0, 6).map(c => c.text) } : m.model, null, 2)) + '</pre>';
+            } catch (e) { preview = '<div class="small">无法生成预览</div>'; }
+            el.innerHTML = title + meta + preview;
+        }
+        function createMapWithModel(name, mdl) {
+            const lib = loadLibrary();
+            const m = { id: rndId(), name: name || ('导图-' + (new Date().toLocaleString())), model: deepCopy(mdl || { id: 'root', text: '中心主题', style: {}, meta: { tags: [] }, children: [] }), created: Date.now(), updated: Date.now() };
+            lib.unshift(m);
+            saveLibrary(lib);
+            renderLibrary();
+            return m.id;
+        }
+        function openMap(id) {
+            const lib = loadLibrary();
+            const m = lib.find(x => x.id === id);
+            if (!m) return alert('导图未找到');
+            model = deepCopy(m.model);
+            appState.currentMapId = id;
+            appState.selected.clear();
+            commitHistory('open map');
+            hideLibrary();
+            renderAll();
+            setStatus('打开：' + (m.name || '未命名'));
+        }
+        function exportMap(id) {
+            const lib = loadLibrary();
+            const m = lib.find(x => x.id === id);
+            if (!m) return alert('导图未找到');
+            const blob = new Blob([JSON.stringify(m.model, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `mindflow-${(m.name || m.id).replace(/\s+/g, '_')}.json`; a.click();
+        }
+        function saveCurrentMap() {
+            const lib = loadLibrary();
+            if (appState.currentMapId) {
+                const m = lib.find(x => x.id === appState.currentMapId);
+                if (m) {
+                    m.model = deepCopy(model);
+                    m.updated = Date.now();
+                    saveLibrary(lib);
+                    renderLibrary();
+                    setStatus('已保存到库');
+                    return;
+                }
+            }
+            const name = prompt('为当前导图命名：', model.text || '我新的导图');
+            if (name == null) return;
+            const id = createMapWithModel(name, model);
+            appState.currentMapId = id;
+            setStatus('已保存到库');
+        }
+
+
+
+        document.addEventListener('DOMContentLoaded', () => {
+            /* ===== 文件下拉菜单 ===== */
+            const fileBtn = $('#btnFileMenu');
+            const filePanel = $('#fileDropdown');
+            fileBtn.addEventListener('click', () => {
+                filePanel.style.display = filePanel.style.display === 'none' ? 'block' : 'none';
+            });
+
+            /* 点击空白关闭 */
+            window.addEventListener('click', e => {
+                if (!fileBtn.contains(e.target) && !filePanel.contains(e.target)) filePanel.style.display = 'none';
+            });
+
+            /* 把旧按钮事件挂到新按钮 */
+            const btnNew = $('#btnNew');
+            const btnOpen = $('#btnOpen');
+            const btnSave = $('#btnSave');
+            const btnSvg = $('#btnSvg');
+            const btnPng = $('#btnPng');
+
+            if (btnNew) {
+                $('#btnNew').onclick = btnNew.onclick;
+            }
+            if (btnOpen) {
+                $('#btnOpen').onclick = btnOpen.onclick;
+            }
+            if (btnSave) {
+                $('#btnSave').onclick = btnSave.onclick;
+            }
+            if (btnSvg) {
+                $('#btnSvg').onclick = btnSvg.onclick;
+            }
+            if (btnPng) {
+                $('#btnPng').onclick = btnPng.onclick;
+            }
+
+            /* 快捷键帮助按钮事件 */
+            const btnShortcuts = $('#btnShortcuts');
+            const closeShortcuts = $('#closeShortcuts');
+
+            if (btnShortcuts) {
+                btnShortcuts.onclick = () => $('#shortcutsModal').style.display = 'flex';
+            }
+            if (closeShortcuts) {
+                closeShortcuts.onclick = () => $('#shortcutsModal').style.display = 'none';
+            }
+
+            /* 初始化 */
+            bootstrap();
+        });
+        /* ---------------------- 历史（撤销/重做） ---------------------- */
+        function commitHistory(label = 'edit') {
+            appState.history.past.push({ label, snapshot: deepCopy(model), view: { tx: appState.tx, ty: appState.ty, scale: appState.scale } });
+            appState.history.future.length = 0;
+            setStatus('已保存：' + label);
+        }
+        function undo() {
+            if (!appState.history.past.length) return;
+            const cur = { snapshot: deepCopy(model), view: { tx: appState.tx, ty: appState.ty, scale: appState.scale } };
+            const last = appState.history.past.pop();
+            appState.history.future.push(cur);
+            model = last.snapshot;
+            Object.assign(appState, last.view);
+            renderAll();
+        }
+        function redo() {
+            if (!appState.history.future.length) return;
+            const cur = { snapshot: deepCopy(model), view: { tx: appState.tx, ty: appState.ty, scale: appState.scale } };
+            const next = appState.history.future.pop();
+            appState.history.past.push(cur);
+            model = next.snapshot;
+            Object.assign(appState, next.view);
+            renderAll();
+        }
+
+        /* ---------------------- 遍历工具 ---------------------- */
+        function walk(node, fn, parent = null, depth = 0, side = 1) {
+            fn(node, parent, depth, side);
+            if (node.children && !node.collapsed) {
+                for (let i = 0; i < node.children.length; i++) {
+                    const c = node.children[i];
+                    const s = appState.layout === 'both' ? (i % 2 === 0 ? 1 : -1) : 1;
+                    const radialS = appState.layout === 'radial' ? (i % 2 === 0 ? 1 : -1) : s;
+                    walk(c, fn, node, depth + 1, radialS);
+                }
+            }
+        }
+        function findById(id, node = model, parent = null) {
+            if (node.id === id) return { node, parent };
+            for (const c of (node.children || [])) {
+                const r = findById(id, c, node);
+                if (r) return r;
+            }
+            // 再查空白节点
+            const orphan = appState.orphanNodes.find(o => o.id === id);
+            if (orphan) return { node: orphan, parent: null };
+            return null;
+        }
+
+        /* ---------------------- 布局算法 ---------------------- */
+        const measureSvg = (() => {
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            const text = document.createElementNS(svg.namespaceURI, 'text');
+            text.setAttribute('class', 'title');
+            svg.appendChild(text);
+            svg.style.position = 'absolute'; svg.style.opacity = '0'; document.body.appendChild(svg);
+            return (str, metaLine = '') => {
+                text.textContent = str || ' ';
+                const bb = text.getBBox();
+                const metaW = metaLine ? (metaLine.length * 6 + 20) : 0;
+                const w = Math.max(bb.width + 28, 80, metaW);
+                const h = Math.max(bb.height + 24 + (metaLine ? 18 : 0), 28);
+                return { w, h };
+            }
+        })();
+
+        function autoLayout() {
+            /* ------------ 1. 先给所有节点量尺寸 ------------ */
+            walk(model, (n) => {
+                const metaLine = [
+                    n.meta?.progress ? `${n.meta.progress}%` : '',
+                    n.meta?.priority ? `P${n.meta.priority}` : '',
+                    (n.meta?.tags || []).slice(0, 3).join(','),
+                ].filter(Boolean).join(' · ');
+                const m = measureSvg(n.text, metaLine);
+                n.style = n.style || {};
+                n.style.w = m.w;
+                n.style.h = m.h;
+                if (!n.meta.imgX) n.meta.imgX = n.x + n.style.w;
+                if (!n.meta.imgY) n.meta.imgY = n.y;
+            });
+
+            const baseGap = 60;   // 水平基础安全间距
+            const siblingGap = 25;   // 兄弟节点垂直间距
+
+            function sizeOf(node) {
+                if (node.collapsed || !node.children?.length) return node.style.h;
+                let sum = 0;
+                for (const c of node.children) sum += sizeOf(c) + siblingGap;
+                sum -= siblingGap;
+                return Math.max(sum, node.style.h);
+            }
+
+            /* ------------ 4️⃣ 递归放置节点（仅改动这里） ------------ */
+            function place(node, x, y, side = 1) {
+                node.x = x;
+                node.y = y;
+                if (node.collapsed || !node.children?.length) return;
+
+                /* 4-1  计算下一层最长子节点宽度 */
+                const maxChildW = node.children.reduce(
+                    (max, c) => Math.max(max, c.style?.w || 0),
+                    0
+                );
+
+                /* 4-2  水平距离 = 父半宽 + 最长子半宽 + 基础间距 */
+                const parentHalfW = (node.style?.w || 120) / 2;
+                const childHalfW = maxChildW / 2;
+                const nextX = x + (parentHalfW + childHalfW + baseGap) * side;
+
+                /* 4-3  垂直布局保持不变 */
+                const totalH = node.children.reduce(
+                    (s, c) => s + sizeOf(c) + siblingGap,
+                    0
+                ) - siblingGap;
+
+                let curY = y - totalH / 2;
+                for (const c of node.children) {
+                    if (c.__manual) {
+                        curY += (c.style?.h || 28) + siblingGap;
+                        continue;
+                    }
+                    const childH = sizeOf(c);
+                    place(c, nextX, curY + childH / 2, side);
+                    curY += childH + siblingGap;
+                }
+            }
+
+            place(model, 0, 0, 1);
+        }
+
+        /* ---------------------- 渲染 ---------------------- */
+        function renderAll() {
+            autoLayout();
+            renderEdges();
+            renderNodes();
+            updateView();
+            updateMiniMap();
+            updateFooter();
+            appState.orphanNodes.forEach(n => {
+                const m = measureSvg(n.text);
+                n.style = n.style || {};
+                n.style.w = m.w; n.style.h = m.h;
+            });
+        }
+        function renderEdges() {
+            const g = $('#edges');
+            g.innerHTML = '';
+            walk(model, (n, p) => {
+                if (!p) return;
+                const path = document.createElementNS(g.namespaceURI, 'path');
+                path.classList.add('edge');
+                const sx = p.x + (p.style.w / 2);
+                const sy = p.y;
+                const tx = n.x - (n.style.w / 2);
+                const ty = n.y;
+                const dx = (tx - sx) * .6;
+                const d = `M ${sx} ${sy} C ${sx + dx} ${sy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
+                path.setAttribute('d', d);
+                path.setAttribute('marker-end', 'url(#arrow)');
+                g.appendChild(path);
+            });
+        }
+        function renderNodes() {
+            const g = $('#nodes');
+            g.innerHTML = '';
+            walk(model, (n, p) => {
+                const node = document.createElementNS(g.namespaceURI, 'g');
+                node.classList.add('node'); node.setAttribute('data-id', n.id);
+                if (appState.selected.has(n.id)) node.setAttribute('data-selected', 'true');
+                node.setAttribute('transform', `translate(${n.x - n.style.w / 2}, ${n.y - n.style.h / 2})`);
+
+                const rect = document.createElementNS(g.namespaceURI, 'rect');
+                rect.setAttribute('width', n.style.w);
+                rect.setAttribute('height', n.style.h);
+                if (n.style.bg) rect.setAttribute('fill', n.style.bg);
+                if (n.style.border) rect.setAttribute('stroke', n.style.border);
+                node.appendChild(rect);
+
+                // 标题
+                const title = document.createElementNS(g.namespaceURI, 'text');
+                title.setAttribute('x', 14); title.setAttribute('y', 18);
+                title.setAttribute('class', 'title');
+                title.textContent = (n.style.icon ? (n.style.icon + ' ') : '') + (n.text || '（空）');
+                node.appendChild(title);
+
+                // meta 行
+                const meta = document.createElementNS(g.namespaceURI, 'text');
+                meta.setAttribute('x', 14); meta.setAttribute('y', 36);
+                meta.setAttribute('class', 'meta');
+                const metaParts = [];
+                if (n.meta?.task) metaParts.push('☑︎');
+                if (n.meta?.progress) metaParts.push(n.meta.progress + '%');
+                if (n.meta?.priority) metaParts.push('P' + n.meta.priority);
+                if (n.meta?.link) metaParts.push('🔗');
+                if (n.meta?.img) metaParts.push('🖼️');
+                if (n.meta?.note) metaParts.push('📝');
+                meta.textContent = metaParts.join(' · ');
+                node.appendChild(meta);
+
+                // 标签
+                if (n.meta?.tags?.length) {
+                    const tagG = document.createElementNS(g.namespaceURI, 'g');
+                    let x = 14, y = n.style.h - 12;
+                    n.meta.tags.slice(0, 3).forEach(t => {
+                        const tb = document.createElementNS(g.namespaceURI, 'rect');
+                        const tt = document.createElementNS(g.namespaceURI, 'text');
+                        tt.setAttribute('x', x + 6); tt.setAttribute('y', y);
+                        tt.setAttribute('class', 'badge'); tt.textContent = '#' + t;
+                        const bb = { w: t.length * 7 + 14, h: 16 };
+                        tb.setAttribute('x', x); tb.setAttribute('y', y - 12); tb.setAttribute('width', bb.w); tb.setAttribute('height', bb.h);
+                        tb.setAttribute('class', 'badge-bg');
+                        tagG.appendChild(tb); tagG.appendChild(tt);
+                        x += bb.w + 6;
+                    });
+                    node.appendChild(tagG);
+                }
+
+                // 折叠按钮（改为更可靠的可点区域）
+                if (n.children?.length) {
+                    const cx = n.style.w - 16, cy = 12;
+                    const hit = document.createElementNS(g.namespaceURI, 'rect');
+                    hit.setAttribute('x', cx - 8); hit.setAttribute('y', cy - 8); hit.setAttribute('width', 16); hit.setAttribute('height', 16);
+                    hit.setAttribute('class', 'collapse-hit');
+                    // 关键：确保透明但可点击
+                    hit.setAttribute('fill', 'black'); hit.setAttribute('fill-opacity', '0.01');
+                    hit.setAttribute('pointer-events', 'all');
+                    hit.addEventListener('click', (e) => { e.stopPropagation(); toggleCollapse(n.id); });
+                    const plus = document.createElementNS(g.namespaceURI, 'text');
+                    plus.setAttribute('x', cx - 4); plus.setAttribute('y', cy + 4); plus.setAttribute('class', 'collapse-btn');
+                    plus.textContent = n.collapsed ? '+' : '−';
+                    node.appendChild(hit); node.appendChild(plus);
+                }
+
+                // 搜索高亮
+                // 搜索高亮（强制样式类）
+                // 搜索高亮：给 rect 打 class，不直接写颜色
+                // ---------- 搜索高亮 ----------
+                if (appState.searchRe && appState.searchRe.test(n.text || '')) {
+                    if (!isNodeHiddenByAncestor(n)) {
+                        rect.classList.add('search-hit');          // 节点自身染紫
+                    } else {
+                        const ancestor = firstUnCollapsedAncestor(n);
+                        if (ancestor) ancestor.__ancestorHit = true;
+                    }
+                } else {
+                    rect.classList.remove('search-hit');
+                }
+
+                // 事件
+                node.addEventListener('mousedown', onNodeMouseDown);
+
+                node.addEventListener('dblclick', () => editNode(n.id));
+
+                // 支持拖拽图片到节点上传（文件或URL）
+                node.addEventListener('dragover', e => { e.preventDefault(); });
+                node.addEventListener('drop', async (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    const dt = e.dataTransfer;
+                    const id = n.id;
+                    const r = findById(id);
+                    if (!r) return;
+                    if (dt.files && dt.files.length) {
+                        const f = dt.files[0];
+                        if (f.type && f.type.startsWith('image/')) {
+                            const data = await fileToDataURL(f);
+                            commitHistory('drop image');
+                            r.node.meta.img = data;
+                            r.node.meta.imgX = r.node.x + r.node.style.w; // 图片的 x 坐标为节点的右边界
+                            r.node.meta.imgY = r.node.y; // 图片的 y 坐标与节点相同
+                            renderAll();
+                            setStatus('图片已上传到节点');
+                            return;
+                        }
+                    }
+                    const url = dt.getData('text/uri-list') || dt.getData('text/plain');
+                    if (url) {
+                        commitHistory('drop image url');
+                        r.node.meta.img = url;
+                        r.node.meta.imgX = r.node.x; //r.node.style.w; // 图片的 x 坐标为节点的右边界
+                        r.node.meta.imgY = r.node.y; // 图片的 y 坐标与节点相同
+                        renderAll();
+                        setStatus('图片URL已设置');
+                    }
+                });
+
+                // 渲染图片
+                if (n.meta?.img) {
+                    const img = document.createElementNS(g.namespaceURI, 'image');
+                    img.setAttribute('x', n.meta.imgX || n.x);//(n.x + n.style.w)); // 图片的 x 坐标为节点的右边界
+                    img.setAttribute('y', n.meta.imgY || n.y); // 图片的 y 坐标与节点相同
+                    img.setAttribute('width', n.meta?.imgW || 128);
+                    img.setAttribute('height', n.meta?.imgH || 128);
+                    img.setAttribute('href', n.meta.img);
+                    img.setAttribute('class', 'node-img');  // ✅ 统一 class
+                    img.setAttribute('data-node-id', n.id); // ✅ 记录所属节点
+                    img.style.cursor = 'move';              // ✅ 提示可移动
+                    img.addEventListener('mousedown', onImageMouseDown, { passive: false });
+                    node.appendChild(img);
+                }
+
+                g.appendChild(node);
+            });
+
+            // 给祖先上紫色
+            walk(model, n => {
+                if (n.__ancestorHit) {
+                    const el = document.querySelector(`.node[data-id="${n.id}"] rect`);
+                    if (el) el.classList.add('search-hit');
+                    delete n.__ancestorHit; // 用完即焚
+                }
+            });
+            /* ===== 渲染空白节点 ===== */
+
+            appState.orphanNodes.forEach(n => {
+                const m = measureSvg(n.text);
+                n.style = n.style || {};
+                n.style.w = m.w;
+                n.style.h = m.h;
+                const node = document.createElementNS(g.namespaceURI, 'g');
+                node.classList.add('node');
+                node.setAttribute('data-id', n.id);
+                if (appState.selected.has(n.id)) node.setAttribute('data-selected', 'true');
+                node.setAttribute('transform', `translate(${n.x - n.style.w / 2}, ${n.y - n.style.h / 2})`);
+
+                const rect = document.createElementNS(g.namespaceURI, 'rect');
+                rect.setAttribute('width', n.style.w);
+                rect.setAttribute('height', n.style.h);
+                rect.setAttribute('fill', 'var(--node-bg)');
+                rect.setAttribute('stroke', 'var(--node-border)');
+                node.appendChild(rect);
+
+                const title = document.createElementNS(g.namespaceURI, 'text');
+                title.setAttribute('x', 14); title.setAttribute('y', 18);
+                title.setAttribute('class', 'title');
+                title.textContent = n.text;
+                node.appendChild(title);
+
+                node.addEventListener('mousedown', onNodeMouseDown);
+
+                node.addEventListener('dblclick', () => editNode(n.id));
+                g.appendChild(node);
+            });
+        }
+        function onImageMouseDown(e) {
+            if (!e.shiftKey) return;          // 仅 Shift 触发
+            e.stopPropagation();              // 阻断节点选中
+            const id = e.currentTarget.getAttribute('data-node-id');
+            const r = findById(id);
+            if (!r) return;
+
+            appState.imageDragging = {
+                node: r.node,
+                startX: e.clientX,
+                startY: e.clientY,
+            };
+
+            window.addEventListener('mousemove', onImageMouseMove);
+            window.addEventListener('mouseup', onImageMouseUp, { once: true });
+        }
+
+        function onImageMouseMove(e) {
+            const drag = appState.imageDragging;
+            if (!drag) return;
+            const dx = e.clientX - drag.startX;
+            const dy = e.clientY - drag.startY;
+
+            // 直接修改 meta 中的坐标
+            drag.node.meta.imgX = (drag.node.meta.imgX ?? drag.node.x + drag.node.style.w) + dx;
+            drag.node.meta.imgY = (drag.node.meta.imgY ?? drag.node.y) + dy;
+
+            drag.startX = e.clientX;
+            drag.startY = e.clientY;
+
+            renderAll();
+        }
+
+        function onImageMouseUp() {
+            if (appState.imageDragging) {
+                commitHistory('move image');
+                appState.imageDragging = null;
+            }
+            window.removeEventListener('mousemove', onImageMouseMove);
+        }
+
+        /* ---------------------- 选择/编辑/结构操作 ---------------------- */
+        function setStatus(s) { $('#status').textContent = s; }
+        function selectOnly(id) { appState.selected = new Set([id]); renderNodes(); }
+        function toggleSelect(id) {
+            if (appState.selected.has(id)) appState.selected.delete(id); else appState.selected.add(id);
+            renderNodes();
+        }
+        function currentId() {
+            if (appState.selected.size) return Array.from(appState.selected)[appState.selected.size - 1];
+            return model.id;
+        }
+        function addSibling() {
+            const cur = findById(currentId());
+            if (!cur || !cur.parent) return;
+
+            commitHistory('add sibling');
+
+            const sibling = {
+                id: rndId(),
+                text: '新节点',
+                children: [],
+                collapsed: false,
+                style: {},
+                meta: { tags: [] },
+                x: cur.node.x, // ✅ 设置初始位置
+                y: cur.node.y - 70,
+            };
+
+
+            const m = measureSvg(sibling.text);
+            sibling.style.w = m.w;
+            sibling.style.h = m.h;
+
+            cur.parent.children.splice(cur.parent.children.indexOf(cur.node) + 1, 0, sibling);
+
+            selectOnly(sibling.id);
+            renderAll();
+            resolveOverlaps();
+            renderAll();
+        }//clearManualUpwards2(currentId());
+        function addChild() {
+            const cur = findById(currentId());
+            if (!cur) return;
+
+            commitHistory('add child');
+
+            const child = {
+                id: rndId(),
+                text: '子节点',
+                children: [],
+                collapsed: false,
+                style: {},
+                meta: { tags: [] },
+                x: cur.node.x + 140, // ✅ 设置初始位置
+                y: cur.node.y
+            };
+
+            const m = measureSvg(child.text);
+            child.style.w = m.w;
+            child.style.h = m.h;
+
+            cur.node.children = cur.node.children || [];
+            cur.node.children.push(child);
+            cur.node.collapsed = false;
+
+
+            selectOnly(child.id);
+            renderAll();
+            resolveOverlaps();
+            renderAll();
+        }//clearManualUpwards(currentId());
+
+        function removeSelected() {
+            if (appState.selected.size === 0) return;
+            if (appState.selected.has(model.id)) return alert('不能删除根节点');
+
+            /* 0 = 取消, 1 = 保留子节点, 2 = 不保留子节点
+            const action = confirm(
+                `确定删除 ${appState.selected.size} 个节点？\n\n` +
+                `[确定]  保留子节点（子节点上浮）\n` +
+                `[取消]  连同子节点全部删除\n` +
+                `[Esc]   取消操作`
+            );*/
+
+            // confirm 只有 true/false，我们借用它：
+            // 点「确定」→ true → 保留子节点
+            // 点「取消」→ false → 不保留子节点
+            // 按「Esc」→ false → 不保留子节点
+            // 为了真正区分，改用 prompt 三选一：
+            const code = prompt(
+                '输入数字选择删除方式：\n' +
+                '1  保留子节点（子节点上浮）\n' +
+                '2  连同子节点全部删除\n' +
+                '其他任意输入或直接取消 → 不做任何操作'
+            );
+            if (code !== '1' && code !== '2') return;   // 取消或误输入
+
+            const mode = code === '1' ? 'keep' : 'all';
+            commitHistory('delete ' + mode);
+
+            const ids = Array.from(appState.selected);
+            ids.forEach(id => {
+                // 先处理空白节点
+                const oIdx = appState.orphanNodes.findIndex(o => o.id === id);
+                if (oIdx > -1) {
+                    appState.orphanNodes.splice(oIdx, 1);
+                    return;
+                }
+
+                // 再处理树节点
+                const r = findById(id);
+                if (!r || !r.parent) return;
+
+                if (mode === 'keep') {
+                    const idx = r.parent.children.indexOf(r.node);
+                    r.parent.children.splice(idx, 1, ...r.node.children);
+                } else {
+                    r.parent.children = r.parent.children.filter(c => c.id !== id);
+                }
+            });
+
+            appState.selected.clear();
+            renderAll();
+        }
+        function toggleCollapse(id) {
+            const r = findById(id);
+            if (!r) return;
+
+            const node = r.node;
+            const key = node.id;
+
+            // 首次记录当前视野
+            if (!appState.viewMemory[key]) {
+                appState.viewMemory[key] = {};
+            }
+            const mem = appState.viewMemory[key];
+
+            if (node.collapsed) {
+                // ======= 即将展开 =======
+                // 1. 先保存「折叠时」视野
+                mem.collapsedTx = appState.tx;
+                mem.collapsedTy = appState.ty;
+                mem.collapsedScale = appState.scale;
+
+                // 2. 如果之前展开过，恢复「展开时」视野
+                if (mem.expandedTx !== undefined) {
+                    appState.tx = mem.expandedTx;
+                    appState.ty = mem.expandedTy;
+                    appState.scale = mem.expandedScale;
+                } else {
+                    // 第一次展开：直接居中到该节点
+                    centerOn(key);
+                    // 把这次自动计算出的视野记为「展开时」视野
+                    mem.expandedTx = appState.tx;
+                    mem.expandedTy = appState.ty;
+                    mem.expandedScale = appState.scale;
+                }
+            } else {
+                // ======= 即将折叠 =======
+                // 1. 保存「展开时」视野
+                mem.expandedTx = appState.tx;
+                mem.expandedTy = appState.ty;
+                mem.expandedScale = appState.scale;
+
+                // 2. 如果有记忆，恢复「折叠时」视野
+                if (mem.collapsedTx !== undefined) {
+                    appState.tx = mem.collapsedTx;
+                    appState.ty = mem.collapsedTy;
+                    appState.scale = mem.collapsedScale;
+                }
+            }
+
+            commitHistory('collapse');
+            node.collapsed = !node.collapsed;
+            renderAll();
+            updateView();
+            updateMiniMap();
+        }
+        function promote() {
+            const r = findById(currentId()); if (!r || !r.parent) return;
+            const gp = findById(r.parent.id);
+            if (!gp || !gp.parent) return;
+            commitHistory('promote');
+            gp.node.children.splice(gp.node.children.indexOf(r.parent) + 1, 0, r.node);
+            r.parent.children = r.parent.children.filter(c => c.id !== r.node.id);
+            renderAll();
+        }
+        function editNode(id) {
+            const r = findById(id); if (!r) return;
+            appState.editing = id;
+            const pt = toScreen(r.node.x, r.node.y);
+            showPanel(pt.x + 10, pt.y + 10, r.node);
+        }
+        function updateNodeMeta(node, patch) {
+            commitHistory('update meta');
+            Object.assign(node.meta, patch);
+            // 保存图片位置
+            if (patch.imgX !== undefined) node.meta.imgX = patch.imgX;
+            if (patch.imgY !== undefined) node.meta.imgY = patch.imgY;
+            renderAll();
+        }
+
+        /* ---------------------- 面板（备注/链接/图片/样式/标签/任务） ---------------------- */
+        const panel = $('#panel');
+        function showPanel(x, y, node) {
+            panel.style.display = 'block';
+            panel.style.left = x + 'px'; panel.style.top = y + 'px';
+            panel.innerHTML = `
+                        <div class="row"><label>标题</label><input id="pText" type="text" value="${escapeHtml(node.text || '')}" /></div>
+                        <div class="row"><label>父节点</label><button class="btn" id="pChangeParent">修改父节点</button> </div>
+
+
+
+                        <div class="row"><label>图标</label><input id="pIcon" type="text" value="${escapeHtml(node.style?.icon || '')}" placeholder="如 🚀 或 😀" /></div>
+                        <div class="row"><label>链接</label><input id="pLink" type="text" value="${escapeHtml(node.meta?.link || '')}" placeholder="https://..." /></div>
+                        <div class="row"><label>图片</label><input id="pImg" type="text" value="${escapeHtml(node.meta?.img || '')}" placeholder="图片URL 或 拖拽上传" /></div>
+                        <div class="row"><label>图片位置 X</label><input id="pImgX" type="number" value="${node.meta?.imgX || 0}" /></div>
+                        <div class="row"><label>图片位置 Y</label><input id="pImgY" type="number" value="${node.meta?.imgY || 0}" /></div>
+                        <div class="row"><label>图片宽</label><input id="pImgW" type="number" min="1" value="${node.meta?.imgW || 128}" /></div>
+                        <div class="row"><label>图片高</label><input id="pImgH" type="number" min="1" value="${node.meta?.imgH || 128}" /></div>
+                        <div class="row"><label>备注</label><textarea id="pNote" placeholder="支持基础 Markdown">${escapeHtml(node.meta?.note || '')}</textarea></div>
+                        <div class="row"><label>任务</label>
+                        <span class="chip ${node.meta?.task ? 'active' : ''}" id="pTask">${node.meta?.task ? '已启用' : '未启用'}</span>
+                        <input type="range" id="pProgress" min="0" max="100" value="${node.meta?.progress || 0}"/>
+                         <span class="kbd" id="pProgressLabel">${node.meta?.progress || 0}%</span>
+                        </div>
+                        <div class="row"><label>优先级</label>
+                        <select id="pPriority">
+                         <option value="0">无</option><option value="1">P1</option><option value="2">P2</option><option value="3">P3</option>
+                        </select>
+                        <span class="chip" id="pTags">${(node.meta?.tags || []).join(',') || '#标签…'}</span>
+                        </div>
+                        <div class="row"><label>样式</label>
+                        <input type="color" id="pFill" value="${toColor(node.style?.bg) || '#ffffff'}" />
+                        <input type="color" id="pBorder" value="${toColor(node.style?.border) || '#ffffff'}" />
+                        <button class="btn" id="pClearColor">重置颜色</button>
+                        <button class="btn" id="pClearAll">清除内容</button>
+                        </div>
+                        <div class="row" style="justify-content:flex-end">
+                        <button class="btn" id="pOk">确定</button>
+                         <button class="btn" id="pCancel">取消</button>
+                         </div>
+                      `;
+            $('#pPriority').value = String(node.meta?.priority || 0);
+            $('#pTask').onclick = () => { $('#pTask').classList.toggle('active'); $('#pTask').textContent = $('#pTask').classList.contains('active') ? '已启用' : '未启用'; };
+            $('#pProgress').oninput = (e) => $('#pProgressLabel').textContent = e.target.value + '%';
+            $('#pTags').onclick = () => {
+                const t = prompt('输入标签，逗号分隔', (node.meta?.tags || []).join(','));
+                if (t != null) $('#pTags').setAttribute('data-tags', t);
+            };
+            $('#pClearColor').onclick = () => { $('#pFill').value = '#ffffff'; $('#pBorder').value = '#ffffff'; };
+            $('#pClearAll').onclick = () => {
+                $('#pText').value = ''; $('#pIcon').value = ''; $('#pLink').value = ''; $('#pImg').value = ''; $('#pNote').value = '';
+                $('#pTask').classList.remove('active'); $('#pTask').textContent = '未启用';
+                $('#pProgress').value = '0'; $('#pProgressLabel').textContent = '0%';
+                $('#pPriority').value = '0'; $('#pTags').setAttribute('data-tags', '');
+                $('#pFill').value = '#ffffff'; $('#pBorder').value = '#ffffff';
+            };
+            $('#pOk').onclick = () => {
+                commitHistory('edit panel');
+                node.text = $('#pText').value;
+                node.style.icon = $('#pIcon').value.trim();
+                node.meta.link = $('#pLink').value.trim();
+                node.meta.img = $('#pImg').value.trim();
+                node.meta.imgX = +$('#pImgX').value; // 更新图片 X 坐标
+                node.meta.imgY = +$('#pImgY').value; // 更新图片 Y 坐标
+                node.meta.imgW = +$('#pImgW').value || 128;
+                node.meta.imgH = +$('#pImgH').value || 128;
+                node.meta.note = $('#pNote').value;
+                node.meta.task = $('#pTask').classList.contains('active');
+                node.meta.progress = +$('#pProgress').value;
+                node.meta.priority = +$('#pPriority').value;
+
+                const t = $('#pTags').getAttribute('data-tags');
+                if (t != null) node.meta.tags = t.split(',').map(s => s.trim()).filter(Boolean); else node.meta.tags = node.meta.tags || [];
+                node.style.bg = fromColor($('#pFill').value);
+                node.style.border = fromColor($('#pBorder').value);
+                hidePanel(); renderAll();
+
+            };
+            $('#pCancel').onclick = () => hidePanel();
+            $('#pChangeParent').onclick = () => {
+                hidePanel();
+                setStatus('请点击新的父节点（树结构中的节点）…');
+                appState.awaitingParent = node.id;
+            };
+        }
+        function hidePanel() { panel.style.display = 'none'; appState.editing = null; }
+        function escapeHtml(s) { return (s ?? '').toString().replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m])); }
+        function toColor(c) { if (!c) return '#ffffff'; const tmp = document.createElement('div'); tmp.style.color = c; document.body.appendChild(tmp); const cs = getComputedStyle(tmp).color; document.body.removeChild(tmp); const m = cs.match(/\d+/g).map(Number); if (!m) return '#ffffff'; return '#' + m.slice(0, 3).map(x => x.toString(16).padStart(2, '0')).join(''); }
+        function fromColor(hex) { return hex; }
+        function fileToDataURL(file) { return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(fr.error); fr.readAsDataURL(file); }); }
+
+        /* ---------------------- 交互：拖拽/缩放/平移/框选 ---------------------- */
+        const stage = $('#stage'); const world = $('#world'); const nodesG = $('#nodes'); const edgesG = $('#edges');
+        let lastMouse = { x: 0, y: 0 };
+        function toWorld(x, y) {
+            const pt = stage.createSVGPoint(); pt.x = x; pt.y = y;
+            const m = world.getCTM().inverse();
+            const p = pt.matrixTransform(m);
+            return { x: p.x, y: p.y };
+        }
+        function toScreen(wx, wy) {
+            const m = world.getCTM();
+            return { x: wx * m.a + m.e, y: wy * m.d + m.f };
+        }
+        function updateView() {
+            world.setAttribute('transform', `translate(${appState.tx},${appState.ty}) scale(${appState.scale})`);
+        }
+        function onWheel(e) {
+            if (e.shiftKey) return;
+            e.preventDefault();
+            const delta = Math.sign(e.deltaY) * -0.08;
+            const old = appState.scale;
+            const nx = clamp(old * (1 + delta), .2, 3);
+            const mouse = toWorld(e.offsetX, e.offsetY);
+            appState.tx = e.offsetX - mouse.x * nx;
+            appState.ty = e.offsetY - mouse.y * nx;
+            appState.scale = nx;
+            updateView(); updateMiniMap();
+        }
+        let panning = false;
+        /* ---------- onMouseDown ---------- */
+        function onMouseDown(e) {
+            const gid = e.currentTarget.dataset?.id;
+
+            // 处于「等待选择新父节点」状态
+            if (appState.awaitingParent) {
+                e.stopPropagation();
+
+                const childId = appState.awaitingParent;
+                const newParentId = gid;
+
+                const childR = findById(childId);
+                const newParentR = findById(newParentId);
+
+                if (!childR || !newParentR) {
+                    setStatus('节点未找到，操作取消');
+                    appState.awaitingParent = null;
+                    return;
+                }
+
+                // 不能选自己
+                if (childId === newParentId) {
+                    setStatus('不能选择自己作为父节点');
+                    appState.awaitingParent = null;
+                    return;
+                }
+
+                // 不能选自己的后代
+                let isDescendant = false;
+                walk(newParentR.node, (n) => {
+                    if (n.id === childId) isDescendant = true;
+                });
+                if (isDescendant) {
+                    setStatus('不能选择自己的后代作为父节点');
+                    appState.awaitingParent = null;
+                    return;
+                }
+
+                commitHistory('change parent');
+
+                // 1. 从旧父节点中移除
+                if (childR.parent) {
+                    childR.parent.children = childR.parent.children.filter(c => c.id !== childId);
+                }
+
+                // 2. 添加到新父节点的 children 中
+                newParentR.node.children = newParentR.node.children || [];
+                newParentR.node.children.push(childR.node);
+                newParentR.node.collapsed = false;
+
+                appState.awaitingParent = null;
+                renderAll(); // 重新布局 + 重新画箭头
+                setStatus('父节点已更新');
+                return;
+            }
+            // 1. 画布上按下 → 开始框选
+            if (e.button === 0 && e.target === stage && appState.selectMode === 'box' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                appState.marquee = { x: e.offsetX, y: e.offsetY, w: 0, h: 0 };
+                const s = $('#selectionBox');
+                s.setAttribute('x', e.offsetX);
+                s.setAttribute('y', e.offsetY);
+                s.setAttribute('width', 0);
+                s.setAttribute('height', 0);
+                s.setAttribute('visibility', 'visible');
+                return;
+            }
+
+            // 2. 已有框时，检查是否点击到框矩形
+            if (appState.marquee) {
+                const box = $('#selectionBox');
+                const bx = +box.getAttribute('x');
+                const by = +box.getAttribute('y');
+                const bw = +box.getAttribute('width');
+                const bh = +box.getAttribute('height');
+                const inBox = e.offsetX >= bx && e.offsetX <= bx + bw &&
+                    e.offsetY >= by && e.offsetY <= by + bh;
+
+                // 2-a 点击节点且节点在框内 → 整框拖动
+                if (e.target.closest('.node')) {
+                    const gid = e.target.closest('.node').dataset.id;
+                    const tl = toWorld(bx, by);
+                    const br = toWorld(bx + bw, by + bh);
+                    const r = findById(gid);
+                    if (r && r.node.x >= tl.x && r.node.x <= br.x &&
+                        r.node.y >= tl.y && r.node.y <= br.y) {
+                        e.preventDefault();
+                        appState.marqueeDrag = {
+                            mx: e.clientX,
+                            my: e.clientY,
+                            nodes: []                     // 收集框内节点
+                        };
+                        $$('#nodes .node').forEach(nEl => {
+                            const id = nEl.dataset.id;
+                            const nodeObj = findById(id)?.node;
+                            if (nodeObj &&
+                                nodeObj.x >= tl.x && nodeObj.x <= br.x &&
+                                nodeObj.y >= tl.y && nodeObj.y <= br.y) {
+                                appState.marqueeDrag.nodes.push(nodeObj);
+                            }
+                        });
+                        return;
+                    }
+                }
+
+                // 2-b 点击空白处 → 关闭框选
+                if (!inBox && e.target === stage) {
+                    closeMarquee();
+                    return;
+                }
+            }
+
+
+            // 2) 普通画布平移
+            if (e.button === 0 && e.target === stage) {
+                panning = true;
+                lastMouse = { x: e.clientX, y: e.clientY };
+            }
+        }
+
+        /* ---------- onMouseMove ---------- */
+        function onMouseMove(e) {
+            // 1. 正在框选
+            if (appState.marquee && !appState.marqueeDrag) {
+                const s = $('#selectionBox');
+                const w = e.offsetX - appState.marquee.x;
+                const h = e.offsetY - appState.marquee.y;
+                s.setAttribute('width', Math.abs(w));
+                s.setAttribute('height', Math.abs(h));
+                s.setAttribute('x', w < 0 ? e.offsetX : appState.marquee.x);
+                s.setAttribute('y', h < 0 ? e.offsetY : appState.marquee.y);
+
+                // 实时更新选中
+                const tl = toWorld(+s.getAttribute('x'), +s.getAttribute('y'));
+                const br = toWorld(+s.getAttribute('x') + +s.getAttribute('width'),
+                    +s.getAttribute('y') + +s.getAttribute('height'));
+                appState.selected.clear();
+                $$('#nodes .node').forEach(nEl => {
+                    const id = nEl.dataset.id;
+                    const nodeObj = findById(id)?.node;
+                    if (nodeObj &&
+                        nodeObj.x - nodeObj.style.w / 2 >= tl.x &&
+                        nodeObj.x + nodeObj.style.w / 2 <= br.x &&
+                        nodeObj.y - nodeObj.style.h / 2 >= tl.y &&
+                        nodeObj.y + nodeObj.style.h / 2 <= br.y) {
+                        appState.selected.add(id);
+                    }
+                });
+                renderNodes();
+                return;
+            }
+
+            // 2. 正在框整体拖动
+            if (appState.marqueeDrag) {
+                const dx = (e.clientX - appState.marqueeDrag.mx) / appState.scale;
+                const dy = (e.clientY - appState.marqueeDrag.my) / appState.scale;
+                appState.marqueeDrag.nodes.forEach(n => { n.x += dx; n.y += dy; });
+                appState.marqueeDrag.mx = e.clientX;
+                appState.marqueeDrag.my = e.clientY;
+                renderEdges(); renderNodes(); updateMiniMap();
+                return;
+            }
+
+
+            // 2) 普通画布平移
+            if (panning) {
+                appState.tx += e.clientX - lastMouse.x;
+                appState.ty += e.clientY - lastMouse.y;
+                lastMouse = { x: e.clientX, y: e.clientY };
+                updateView();
+                updateMiniMap();
+            }
+        }
+
+        /* ---------- onMouseUp ---------- */
+        function onMouseUp() {
+            panning = false;
+            if (appState.marqueeDrag) {
+                commitHistory('move box selection');
+                appState.marqueeDrag = null;
+            }
+        }
+        function closeMarquee() {
+            $('#selectionBox').setAttribute('visibility', 'hidden');
+            appState.selected.clear();
+            appState.marquee = null;
+            renderNodes();
+        }
+
+        // 键盘
+        document.addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && appState.marquee) closeMarquee();
+        });
+
+        // 画布空白处点击
+        stage.addEventListener('mousedown', e => {
+            if (appState.marquee && e.target === stage) closeMarquee();
+        });
+
+        let spaceDown = false;
+        window.addEventListener('keydown', e => { if (e.code === 'Space') { spaceDown = true; document.body.style.cursor = 'grab'; } });
+        window.addEventListener('keyup', e => { if (e.code === 'Space') { spaceDown = false; document.body.style.cursor = ''; } });
+
+        function onNodeMouseDown(e) {
+            if (appState.marquee) {
+                closeMarquee();
+                return;   // 你也可以选择继续处理选中
+            }
+            // ✅ 优先处理「修改父节点」状态
+            if (appState.awaitingParent) {
+                e.stopPropagation(); // 必须阻止事件冒泡
+
+                const childId = appState.awaitingParent;
+                const newParentId = e.currentTarget.getAttribute('data-id');
+
+                const childR = findById(childId);
+                const newParentR = findById(newParentId);
+
+                if (!childR || !newParentR) {
+                    setStatus('节点未找到，操作取消');
+                    appState.awaitingParent = null;
+                    return;
+                }
+
+                if (childId === newParentId) {
+                    setStatus('不能选择自己作为父节点');
+                    appState.awaitingParent = null;
+                    return;
+                }
+
+                // 检查是否是后代
+                let isDescendant = false;
+                walk(newParentR.node, (n) => {
+                    if (n.id === childId) isDescendant = true;
+                });
+                if (isDescendant) {
+                    setStatus('不能选择自己的后代作为父节点');
+                    appState.awaitingParent = null;
+                    return;
+                }
+
+                commitHistory('change parent');
+
+                // 1. 从旧父节点移除
+                if (childR.parent) {
+                    childR.parent.children = childR.parent.children.filter(c => c.id !== childId);
+                }
+
+                // 2. 添加到新父节点
+                newParentR.node.children = newParentR.node.children || [];
+                newParentR.node.children.push(childR.node);
+                newParentR.node.collapsed = false;
+
+                appState.awaitingParent = null;
+                renderAll();
+                setStatus('父节点已更新');
+                return;
+            }
+
+            if (appState.lockNodes) return;   // ✅ 锁定状态下直接忽略节点事件
+            e.stopPropagation();
+            const gid = e.currentTarget.getAttribute('data-id');
+            const worldPos = toWorld(e.clientX - stage.getBoundingClientRect().left, e.clientY - stage.getBoundingClientRect().top);
+            let last = worldPos;
+            if (e.shiftKey) toggleSelect(gid); else selectOnly(gid);
+            // 拖拽节点：添加偏移（在自动布局基础上允许人工微调）
+            appState.dragging = { id: gid, start: last };
+            window.addEventListener('mousemove', dragMove);
+            window.addEventListener('mouseup', dragEnd, { once: true });
+
+            // 双击事件
+            if (e.detail === 2) { // detail === 2 表示双击
+                e.preventDefault();
+                editNode(gid); // 调用 editNode 函数打开样式面板
+            }
+        }
+        function dragMove(e) {
+            const wp = toWorld(e.clientX - stage.getBoundingClientRect().left, e.clientY - stage.getBoundingClientRect().top);
+            const d = { x: wp.x - appState.dragging.start.x, y: wp.y - appState.dragging.start.y };
+            appState.dragging.start = wp;
+            const ids = Array.from(appState.selected);
+            ids.forEach(id => {
+                const r = findById(id).node;
+                r.x += d.x; r.y += d.y;
+            });
+            renderEdges(); renderNodes(); updateMiniMap();
+        }
+        function dragEnd() {
+            window.removeEventListener('mousemove', dragMove);
+            resolveOverlaps(); // ✅ 新增
+            commitHistory('drag nodes');
+            appState.dragging = null;
+            /*const ids = Array.from(appState.selected);
+            ids.forEach(id => {
+                const r = findById(id);
+                if (r) r.node.__manual = true;
+            });*/
+            renderAll();
+        }
+
+        /* ---------------------- 搜索 ---------------------- */
+        $('#search').addEventListener('input', (e) => {
+            const v = e.target.value.trim();
+            appState.searchRe = v ? new RegExp(v, 'i') : null;
+            renderNodes();
+        });
+
+        /* ---------------------- 迷你地图 ---------------------- */
+        function worldBBox() {
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            walk(model, (n) => {
+                minX = Math.min(minX, n.x - n.style.w / 2); minY = Math.min(minY, n.y - n.style.h / 2);
+                maxX = Math.max(maxX, n.x + n.style.w / 2); maxY = Math.max(maxY, n.y + n.style.h / 2);
+            });
+            if (!isFinite(minX)) return { x: -100, y: -100, w: 200, h: 200 };
+            return { x: minX - 120, y: minY - 120, w: (maxX - minX) + 240, h: (maxY - minY) + 240 };
+        }
+        function updateMiniMap() {
+            const mini = $('#miniSvg'); const mw = $('#miniWorld'); const vp = $('#miniViewport');
+            mw.innerHTML = '';
+            const bb = worldBBox();
+            const sx = mini.clientWidth / bb.w;
+            const sy = mini.clientHeight / bb.h;
+            const s = Math.min(sx, sy);
+            // 节点点位
+            walk(model, (n) => {
+                const cx = (n.x - bb.x) * s, cy = (n.y - bb.y) * s;
+                const dot = document.createElementNS(mini.namespaceURI, 'rect');
+                dot.setAttribute('x', cx - 2); dot.setAttribute('y', cy - 2); dot.setAttribute('width', 4); dot.setAttribute('height', 4);
+                dot.setAttribute('fill', 'var(--accent)');
+                mw.appendChild(dot);
+            });
+            // 视口
+            const view = {
+                x: (-appState.tx - bb.x * appState.scale) * s / appState.scale,
+                y: (-appState.ty - bb.y * appState.scale) * s / appState.scale,
+                w: (stage.clientWidth) * s / appState.scale,
+                h: (stage.clientHeight) * s / appState.scale,
+            };
+            vp.setAttribute('x', view.x); vp.setAttribute('y', view.y);
+            vp.setAttribute('width', view.w); vp.setAttribute('height', view.h);
+        }
+
+        /* ---------------------- 导入导出 ---------------------- */
+        $('#btnSave').onclick = () => {
+            const blob = new Blob([JSON.stringify(model, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `mindflow-${Date.now()}.json`; a.click();
+        };
+        
+        // 保存到数据库功能
+        $('#btnSaveToDb').onclick = async () => {
+            try {
+                const name = prompt('请输入思维导图名称:', `思维导图_${Date.now()}`);
+                if (!name) return;
+                
+                setStatus('正在保存到数据库...');
+                
+                // 当前用户ID（如果有登录的话）
+                const userId = localStorage.getItem('userId') || null;
+                
+                // 发送请求到后端API
+                const response = await fetch('/api/save-mindmap', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        data: model,
+                        userId: userId
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    setStatus('思维导图已成功保存到数据库！');
+                    alert('保存成功！');
+                } else {
+                    setStatus(`保存失败: ${result.error}`);
+                    alert(`保存失败: ${result.error}`);
+                }
+            } catch (error) {
+                setStatus(`保存失败: ${error.message}`);
+                alert(`保存失败: ${error.message}`);
+            }
+        };
+        
+        // 从数据库导入思维导图功能
+        $('#btnLoadFromDb').onclick = async () => {
+            try {
+                setStatus('正在从数据库加载思维导图...');
+                
+                // 当前用户ID（如果有登录的话）
+                const userId = localStorage.getItem('userId') || null;
+                
+                // 根据是否有用户ID选择不同的API端点
+                const apiUrl = userId ? `/api/mindmaps/user/${userId}` : '/api/mindmaps';
+                
+                // 发送请求到后端API
+                const response = await fetch(apiUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.mindmaps && result.mindmaps.length > 0) {
+                    // 创建选择对话框
+                    const mapSelect = document.createElement('div');
+                    mapSelect.className = 'modal';
+                    mapSelect.style.cssText = `
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(0,0,0,0.5);
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        z-index: 1000;
+                    `;
+                    
+                    const modalContent = document.createElement('div');
+                    modalContent.style.cssText = `
+                        background: var(--panel);
+                        border-radius: 12px;
+                        padding: 20px;
+                        width: 500px;
+                        max-height: 60vh;
+                        overflow-y: auto;
+                        box-shadow: var(--shadow);
+                    `;
+                    
+                    modalContent.innerHTML = `
+                        <h3 style="margin-top: 0;">选择要导入的思维导图</h3>
+                        <div id="dbMapsList" style="display: flex; flex-direction: column; gap: 8px; margin: 15px 0;"></div>
+                        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                            <button class="btn" id="closeModalBtn">关闭</button>
+                        </div>
+                    `;
+                    
+                    mapSelect.appendChild(modalContent);
+                    document.body.appendChild(mapSelect);
+                    
+                    // 填充思维导图列表
+                    const dbMapsList = document.getElementById('dbMapsList');
+                    result.mindmaps.forEach(map => {
+                        const mapItem = document.createElement('div');
+                        mapItem.style.cssText = `
+                            padding: 12px;
+                            border: 1px solid var(--muted);
+                            border-radius: 8px;
+                            cursor: pointer;
+                            transition: all 0.2s ease;
+                        `;
+                        
+                        mapItem.innerHTML = `
+                            <div style="font-weight: 600;">${escapeHtml(map.name)}</div>
+                            <div class="small">创建时间: ${new Date(map.created_at).toLocaleString()}</div>
+                            ${map.user_id ? '<div class="small">用户: ' + map.user_id + '</div>' : ''}
+                        `;
+                        
+                        mapItem.addEventListener('mouseover', () => {
+                            mapItem.style.background = 'var(--muted)';
+                        });
+                        
+                        mapItem.addEventListener('mouseout', () => {
+                            mapItem.style.background = 'transparent';
+                        });
+                        
+                        mapItem.addEventListener('click', async () => {
+                            try {
+                                setStatus('正在导入思维导图...');
+                                // 解析存储在数据库中的JSON数据
+                                const mapData = JSON.parse(map.data);
+                                
+                                // 打开并渲染选中的思维导图
+                                model = deepCopy(mapData);
+                                appState.currentMapId = null; // 清除本地库的关联
+                                appState.selected.clear();
+                                commitHistory('import from database');
+                                renderAll();
+                                setStatus('已从数据库导入: ' + map.name);
+                                
+                                // 关闭模态框
+                                document.body.removeChild(mapSelect);
+                                alert('导入成功！');
+                            } catch (error) {
+                                console.error('导入思维导图失败:', error);
+                                alert('导入失败: ' + error.message);
+                                setStatus('导入失败');
+                            }
+                        });
+                        
+                        dbMapsList.appendChild(mapItem);
+                    });
+                    
+                    // 关闭模态框按钮
+                    document.getElementById('closeModalBtn').addEventListener('click', () => {
+                        document.body.removeChild(mapSelect);
+                        setStatus('已取消从数据库导入');
+                    });
+                    
+                    setStatus(`找到 ${result.mindmaps.length} 个思维导图`);
+                } else {
+                    setStatus('未找到思维导图');
+                    alert('数据库中没有找到思维导图');
+                }
+            } catch (error) {
+                setStatus(`从数据库加载失败: ${error.message}`);
+                alert(`从数据库加载失败: ${error.message}`);
+            }
+        };
+        $('#btnOpen').onclick = () => $('#fileOpen').click();
+        $('#fileOpen').addEventListener('change', async (e) => {
+            const file = e.target.files[0]; if (!file) return;
+            const txt = await file.text();
+            try {
+                const data = JSON.parse(txt);
+                commitHistory('open');
+                model = data; appState.selected.clear(); renderAll(); setStatus('导入完成');
+            } catch (err) { alert('JSON 无法解析：' + err.message); }
+        });
+        $('#btnSvg').onclick = () => {
+            const clone = $('#stage').cloneNode(true);
+            clone.querySelector('#selectionBox')?.setAttribute('visibility', 'hidden');
+            const s = new XMLSerializer().serializeToString(clone);
+            const blob = new Blob([s], { type: 'image/svg+xml' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `mindflow-${Date.now()}.svg`; a.click();
+        };
+        $('#btnPng').onclick = async () => {
+            const svg = $('#stage');
+            const s = new XMLSerializer().serializeToString(svg);
+            const img = new Image();
+            const bb = worldBBox();
+            const pad = 60;
+            const scale = 2;
+            const w = Math.max(800, (bb.w + pad * 2) * scale);
+            const h = Math.max(600, (bb.h + pad * 2) * scale);
+            const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            const bg = getComputedStyle(document.body).getPropertyValue('--bg').trim();
+            ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+            const blob = new Blob([s], { type: 'image/svg+xml;charset=utf-8' }); const url = URL.createObjectURL(blob);
+            await new Promise(res => { img.onload = res; img.src = url; });
+            const vw = svg.clientWidth, vh = svg.clientHeight;
+            ctx.drawImage(img, (w - vw * scale) / 2, (h - vh * scale) / 2, vw * scale, vh * scale);
+            const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = `mindflow-${Date.now()}.png`; a.click();
+            URL.revokeObjectURL(url);
+        };
+
+        /* ---------------------- 键盘与按钮 ---------------------- */
+        document.addEventListener('keydown', (e) => {
+            if (
+                panel.style.display === 'block' ||
+                $('#libraryOverlay').style.display === 'flex' ||
+                $('#shortcutsModal').style.display === 'flex'
+            ) {
+                return;
+            }
+            const meta = e.metaKey || e.ctrlKey;
+            if (e.key === 'Enter' && !e.shiftKey) { addSibling(); e.preventDefault(); }
+            if (e.key === 'Enter' && e.shiftKey) { addSibling(); e.preventDefault(); }
+            if (e.key === 'Tab' && !e.shiftKey) { addChild(); e.preventDefault(); }
+            if (e.key === 'Tab' && e.shiftKey) { promote(); e.preventDefault(); }
+            if (e.key === 'F') { addParent(); e.preventDefault(); }
+            if (e.key === 'f') { addParent(); e.preventDefault(); }
+            if (e.key === '/' && !e.shiftKey) { removeSelected(); e.preventDefault(); } // 修改为使用 / 键删除节点
+            if (e.key === ' ' && !appState.editing) { // 折叠
+                toggleCollapse(currentId()); e.preventDefault();
+            }
+            if (meta && e.key.toLowerCase() === 'z') { if (e.shiftKey) redo(); else undo(); e.preventDefault(); }
+            if (meta && e.key.toLowerCase() === 'f') { $('#search').focus(); $('#search').select(); e.preventDefault(); }
+            if (e.key === '+') { onWheel({ preventDefault: () => { }, deltaY: -100, offsetX: stage.clientWidth / 2, offsetY: stage.clientHeight / 2 }); }
+            if (e.key === '-') { onWheel({ preventDefault: () => { }, deltaY: 100, offsetX: stage.clientWidth / 2, offsetY: stage.clientHeight / 2 }); }
+            if (e.key === '1') { appState.layout = 'right'; renderAll(); }
+            if (e.key === '2') { appState.layout = 'both'; renderAll(); }
+            if (e.key === '3') { appState.layout = 'radial'; renderAll(); }
+            if (e.key === '.') {
+                appState.lockNodes = !appState.lockNodes;
+                setStatus(appState.lockNodes ? '节点已锁定（按 . 或 Esc 解锁）' : '节点已解锁');
+                return;
+            }
+            if (e.key === 'D' && e.shiftKey) {
+                appState.deleteMode = appState.deleteMode === 'keep' ? 'all' : 'keep';
+                setStatus('删除模式：' + (appState.deleteMode === 'keep' ? '保留子节点' : '连同子节点'));
+            }
+            if (e.key === 'Escape') {
+                if (appState.lockNodes) {
+                    appState.lockNodes = false;
+                    setStatus('节点已解锁');
+                }
+            }
+            // R 键：重置所有手动布局 → 恢复默认坐标
+            // 在 document.addEventListener('keydown', (e) => { ... }) 中，找到以下部分并替换：
+
+            // 找到你的 document.addEventListener('keydown', (e) => { ... }) 函数，替换以下部分：
+
+            // ✅ Shift + R：重置所有手动布局节点
+            if (e.shiftKey && (e.key === 'R' || e.key === 'r')) {
+                e.preventDefault(); // 阻止默认行为
+                const allNodes = [];
+                walk(model, (n) => {
+                    if (n.__manual) allNodes.push(n);
+                });
+
+                if (allNodes.length === 0) {
+                    setStatus('没有节点需要重置');
+                    return;
+                }
+
+                if (!confirm(`将重置 ${allNodes.length} 个节点的位置，确定吗？`)) return;
+
+                allNodes.forEach(n => {
+                    n.__manual = false; // 清除手动标记
+                });
+
+                commitHistory('reset all manual layout');
+                renderAll();
+                setStatus('已恢复默认布局');
+                return; // 关键：阻止继续执行下面的 R 键判断
+            }
+
+            // ✅ 普通 R：重置选中的节点
+            if (!e.shiftKey && (e.key === 'R' || e.key === 'r')) {
+                e.preventDefault();
+                const ids = Array.from(appState.selected);
+                if (ids.length === 0) {
+                    setStatus('请先选中节点');
+                    return;
+                }
+
+                if (!confirm(`重置 ${ids.length} 个节点到默认位置？`)) return;
+
+                ids.forEach(id => {
+                    const r = findById(id);
+                    if (r) {
+                        r.node.__manual = false; // 清除手动标记
+                    }
+                });
+
+                commitHistory('reset selected nodes');
+                renderAll();
+                setStatus('已重置选中节点');
+                return;
+            }
+
+        });
+        $('#btnAddSibling').onclick = addSibling;
+        $('#btnAddParent').onclick = addParent;
+        $('#btnAddChild').onclick = addChild;
+        $('#btnDelete').onclick = removeSelected;
+        $('#btnLayoutRight').onclick = () => { appState.layout = 'right'; renderAll(); };
+        $('#btnLayoutBoth').onclick = () => { appState.layout = 'both'; renderAll(); };
+        $('#btnLayoutRadial').onclick = () => { appState.layout = 'radial'; renderAll(); };
+        $('#btnUndo').onclick = undo; $('#btnRedo').onclick = redo;
+        $('#btnFit').onclick = () => fitView();
+        $('#btnCenter').onclick = () => centerOn(model.id);
+        $('#btnTheme').onclick = () => {
+            const cur = document.body.getAttribute('data-theme'); document.body.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+        };
+        $('#btnNew').onclick = () => {
+            if (!confirm('新建会丢失当前未保存修改，继续？')) return;
+            commitHistory('new');
+            model = { id: 'root', text: '中心主题', style: {}, meta: { tags: [] }, children: [] };
+            appState.selected.clear(); appState.tx = stage.clientWidth / 2; appState.ty = stage.clientHeight / 2; appState.scale = 1;
+            appState.currentMapId = null;
+            renderAll();
+        };
+
+
+        /* library buttons */
+        $('#btnLibrary').onclick = () => showLibrary();
+        $('#libCloseBtn').onclick = () => hideLibrary();
+        $('#libNewBtn').onclick = () => { const name = prompt('导图名称：', '新的导图'); if (name != null) { const id = createMapWithModel(name, model); openMap(id); } };
+        $('#libImportBtn').onclick = () => $('#libFile').click();
+        $('#libFile').addEventListener('change', async (e) => {
+            const f = e.target.files[0]; if (!f) return;
+            const txt = await f.text();
+            try {
+                const data = JSON.parse(txt);
+                const name = prompt('为导入的导图命名：', data.text || '导入导图');
+                const id = createMapWithModel(name, data);
+                renderLibrary();
+                setStatus('导入到库：' + name);
+            } catch (err) { alert('JSON 无法解析：' + err.message); }
+        });
+        $('#btnSaveMap').onclick = () => saveCurrentMap();
+
+
+        /* ---------------------- 视图控制 ---------------------- */
+        function fitView() {
+            const bb = worldBBox();
+            const pad = 100;
+            const sx = (stage.clientWidth - pad) / bb.w;
+            const sy = (stage.clientHeight - pad) / bb.h;
+            const s = clamp(Math.min(sx, sy), .2, 3);
+            appState.scale = s;
+            appState.tx = (stage.clientWidth - (bb.x * s) - (bb.w * s)) / 2 - (bb.x * s - 0);
+            appState.ty = (stage.clientHeight - (bb.y * s) - (bb.h * s)) / 2 - (bb.y * s - 0);
+            updateView(); updateMiniMap();
+        }
+        function centerOn(id) {
+            const r = findById(id); if (!r) return;
+            const scr = { x: stage.clientWidth / 2, y: stage.clientHeight / 2 };
+            const s = appState.scale;
+            appState.tx = scr.x - r.node.x * s;
+            appState.ty = scr.y - r.node.y * s;
+            updateView(); updateMiniMap();
+        }
+        //-----------------------------------------------
+        function addParent() {
+            const cur = findById(currentId());
+            if (!cur || !cur.parent) return;
+
+            commitHistory('add parent');
+
+            // 1. 先把当前节点及其全部后代整体右移 140px，避免重叠
+            const offset = 140;
+            (function shiftX(node) {
+                node.x += offset;
+                (node.children || []).forEach(shiftX);
+            })(cur.node);
+
+            // 2. 创建新的父节点，放在原位置
+            const newParent = {
+                id: rndId(),
+                text: '父级节点',
+                children: [cur.node],
+                collapsed: false,
+                style: {},
+                meta: { tags: [] },
+                x: cur.node.x - offset, // 原位置
+                y: cur.node.y
+            };
+            const m = measureSvg(newParent.text);
+            newParent.style.w = m.w;
+            newParent.style.h = m.h;
+
+            // 3. 替换到原父节点的 children 中
+            const idx = cur.parent.children.indexOf(cur.node);
+            cur.parent.children.splice(idx, 1, newParent);
+
+
+            selectOnly(newParent.id);
+            renderAll();
+            resolveOverlaps();
+            renderAll();
+        } //clearManualUpwards2(currentId());// ✅ 清除手动标记clearManualUpwards2(currentId());
+        /*function addParent() {
+            const curIds = Array.from(appState.selected);
+            if (curIds.length === 0) {
+                setStatus('请先选中要挂接的节点');
+                return;
+            }
+
+            // 1. 过滤出真正的空白节点
+            const orphanIds = curIds.filter(id =>
+                appState.orphanNodes.some(o => o.id === id)
+            );
+            if (orphanIds.length === 0) {
+                setStatus('选中的节点已在树中，无需再绑定父级');
+                return;
+            }
+
+            // 2. 收集所有可选父节点（树节点 + 空白节点，排除自己）
+            const candidates = [];
+            // ① 树节点
+            walk(model, n => candidates.push({ id: n.id, text: n.text }));
+            // ② 空白节点
+            appState.orphanNodes.forEach(o => {
+                if (!orphanIds.includes(o.id)) {
+                    candidates.push({ id: o.id, text: o.text });
+                }
+            });
+
+            if (candidates.length === 0) {
+                setStatus('没有可用的父节点');
+                return;
+            }
+
+            // 3. 弹列表让用户选择（cancel 返回 null）
+            const choices = candidates.map((c, idx) => `${idx + 1}. ${c.text} (${c.id})`).join('\n');
+            const input = prompt(
+                `请选择要作为父级的节点（输入序号即可）：\n\n${choices}\n\n输入 0 或取消可放弃操作`
+            );
+            if (!input) return;                // 取消
+            const idx = parseInt(input, 10) - 1;
+            if (isNaN(idx) || idx < 0 || idx >= candidates.length) return;
+
+            const parentId = candidates[idx].id;
+            const parent = findById(parentId);
+            if (!parent) return;
+
+            // 4. 真正绑定
+            commitHistory('bind parent');
+            orphanIds.forEach(id => {
+                const r = findById(id);
+                if (!r) return;
+
+                // 从空白列表移除
+                const oIdx = appState.orphanNodes.findIndex(o => o.id === id);
+                if (oIdx > -1) appState.orphanNodes.splice(oIdx, 1);
+
+                // 挂到父节点
+                parent.node.children = parent.node.children || [];
+                parent.node.children.push(r.node);
+                parent.node.collapsed = false;
+                clearManualUpwards(id);
+            });
+
+            renderAll();
+            setStatus(`已将 ${orphanIds.length} 个节点绑定到 ${parent.node.text}`);
+        }*/
+
+        /* ---------------------- 事件绑定 ---------------------- */
+        stage.addEventListener('wheel', onWheel, { passive: false });
+        stage.addEventListener('mousedown', onMouseDown);
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+
+        /* ---------------------- 底部信息 ---------------------- */
+        function updateFooter() {
+            let nodes = 0, edges = 0;
+            walk(model, () => nodes++, (p) => edges++);
+            $('#footMeta').textContent = `节点: ${nodes} · 连线: ${Math.max(0, nodes - 1)} · ${nowStr()}`;
+            if (appState.lockNodes) $('#footMeta').textContent += ' · 节点已锁定';
+        }
+
+        /* ---------------------- 辅助 ---------------------- */
+        function toMarkdownHtml(md) {
+            return md
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+                .replace(/\*(.+?)\*/g, '<i>$1</i>')
+                .replace(/__(.+?)__/g, '<u>$1</u>')
+                .replace(/`(.+?)`/g, '<code>$1</code>')
+                .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank">$1</a>');
+        }
+
+        /* ---------------------- Library UI ---------------------- */
+        function showLibrary() {
+            $('#libraryOverlay').style.display = 'flex';
+            renderLibrary();
+        }
+        function hideLibrary() {
+            $('#libraryOverlay').style.display = 'none';
+        }
+
+        /* ---------------------- 初始化 ---------------------- */
+        function bootstrap() {
+            commitHistory('init');
+            // 初始定位居中
+            appState.scale = 1; appState.tx = stage.clientWidth / 2; appState.ty = stage.clientHeight / 2;
+            renderAll();
+            setStatus('就绪');
+            // 如果本地没有导图，先创建一个示例导图并打开库
+            const lib = loadLibrary();
+            if (!lib.length) {
+                createMapWithModel('示例导图', model);
+            }
+            // 显示库作为主界面入口（用户可以选择导图或继续当前）
+            showLibrary();
+            /* 监听粘贴事件 */
+            window.addEventListener('paste', async (e) => {
+                const items = e.clipboardData?.items;
+                if (!items) return;
+
+                for (const item of items) {
+                    if (item.type.startsWith('image/')) {
+                        e.preventDefault();
+                        const file = item.getAsFile();
+                        if (!file) continue;
+
+                        const dataUrl = await fileToDataURL(file);
+                        const id = currentId();
+                        const r = findById(id);
+                        if (!r) continue;
+
+                        commitHistory('paste image');
+                        r.node.meta.img = dataUrl;
+                        r.node.meta.imgX = r.node.x + r.node.style.w; // 默认放在节点右侧
+                        r.node.meta.imgY = r.node.y;
+                        renderAll();
+                        setStatus('图片已粘贴到节点');
+                        break;
+                    }
+                }
+
+            });
+            /* 方法二：Shift + 滚轮缩放当前节点图片 */
+            window.addEventListener('wheel', (e) => {
+                if (!e.shiftKey) return;                // 仅按住 Shift 时生效
+                const id = currentId();                 // 当前选中的节点
+                if (!id) return;
+                const r = findById(id);
+                if (!r || !r.node.meta.img) return;     // 没有图片忽略
+
+                e.preventDefault();
+                const scaleFactor = e.deltaY < 0 ? 1.1 : 0.9; // 向上放大，向下缩小
+                let w = r.node.meta.imgW ?? 128;
+                let h = r.node.meta.imgH ?? 128;
+                w = Math.round(w * scaleFactor);
+                h = Math.round(h * scaleFactor);
+                w = Math.max(16, Math.min(800, w));     // 限制范围
+                h = Math.max(16, Math.min(800, h));
+
+                commitHistory('resize image');
+                r.node.meta.imgW = w;
+                r.node.meta.imgH = h;
+                renderAll();
+                setStatus(`图片尺寸 ${w} × ${h}`);
+            }, { passive: false });
+
+
+
+            window.addEventListener('beforeunload', (e) => {
+                // 你可以根据实际需求判断是否有未保存内容
+                const hasUnsaved = true; // 示例：始终提示
+                if (hasUnsaved) {
+                    e.preventDefault();
+                    e.returnValue = '导图尚未保存，确定要离开吗？';
+                }
+            });
+            window.addEventListener('keydown', e => {
+                if (e.key === 'Escape') {
+                    appState.imageDragging = null;
+                }
+            });
+            $('#btnSelMode').onclick = () => {
+                appState.selectMode = appState.selectMode === 'point' ? 'box' : 'point';
+                $('#btnSelMode').textContent = appState.selectMode === 'point' ? '点选模式' : '框选模式';
+                setStatus('已切换为 ' + $('#btnSelMode').textContent);
+            };
+        }
+        function resetNodePosition(id) {
+            const r = findById(id);
+            if (!r) return;
+            r.node.__manual = false;   // ✅ 去掉手动标记
+            commitHistory('reset layout');
+            renderAll();
+        }
+        function clearManualUpwards(id) {
+            let current = findById(id);
+            while (current) {
+                delete current.node.__manual;
+                current = current.parent ? findById(current.parent.id) : null;
+            }
+        }
+        function clearManualUpwards2(id) {
+            const r = findById(id);
+            if (!r || !r.parent) return;
+            delete r.node.__manual;
+            clearManualUpwards(r.parent.id);   // 递归父节点
+        }
+        function addOrphanNode() {
+            const node = {
+                id: rndId(),
+                text: '空白节点',
+                children: [],
+                collapsed: false,
+                style: {},
+                meta: { tags: [] },
+                __orphan: true
+            };
+            // 放到画布中心
+            node.x = (stage.clientWidth / 2 - appState.tx) / appState.scale;
+            node.y = (stage.clientHeight / 2 - appState.ty) / appState.scale;
+
+            /* ===== 新增：补上宽高，避免 NaN ===== */
+            const m = measureSvg(node.text);
+            node.style.w = m.w;
+            node.style.h = m.h;
+
+            appState.orphanNodes.push(node);
+            commitHistory('add orphan');
+            renderAll();
+        }
+        window.addEventListener('resize', () => { updateMiniMap(); });
+
+
+        bootstrap();
+        $('#btnOrphan').onclick = addOrphanNode;
+        /* ===== 点击画布空白处关闭浮动面板 ===== */
+        stage.addEventListener('mousedown', e => {
+            // 如果点的是画布本身（不是节点、不是按钮）且面板已打开
+            if (e.target === stage && panel.style.display === 'block') {
+
+                document.getElementById('pOk')?.click();
+                hidePanel();
+            }
+        });
+        /* ===== 极简方案：Ctrl+点击节点跳转链接 =====
+        stage.addEventListener('click', function (e) {
+            // 找到实际节点
+            let el = e.target;
+            while (el && !el.classList.contains('node')) el = el.parentElement;
+            if (!el) return;
+
+            if (e.ctrlKey || e.metaKey) {
+                const id = el.dataset.id;
+                const r = findById(id);
+                if (!r) return;
+
+                const url = r.node.meta?.link || '';
+                if (url) {
+                    window.open(url, '_blank');
+                } else {
+                    console.log('节点链接为空');
+                }
+                e.stopPropagation();   // 防止其它事件触发
+            }
+        });*/
+        /* ===== 修复 NaN / undefined 报错 ===== */
+        (() => {
+            // 1. 兜底 measureSvg
+            const oldMeasure = measureSvg;
+            window.measureSvg = (str, metaLine) => {
+                const res = oldMeasure(str, metaLine);
+                return { w: Math.max(res.w || 80, 80), h: Math.max(res.h || 28, 28) };
+            };
+
+            // 2. 兜底 autoLayout 里的 place
+            const oldPlace = window.place || function () { };
+            if (window.place) return;  // 已兜底则跳过
+        })();
+        // 判断两个节点是否重叠
+        function isOverlap(a, b, tolerance = 4) {
+            const ax = a.x - a.style.w / 2;
+            const ay = a.y - a.style.h / 2;
+            const bx = b.x - b.style.w / 2;
+            const by = b.y - b.style.h / 2;
+
+            return !(ax + a.style.w + tolerance < bx ||
+                bx + b.style.w + tolerance < ax ||
+                ay + a.style.h + tolerance < by ||
+                by + b.style.h + tolerance < ay);
+        }
+        function resolveOverlaps() {
+            const nodes = [];
+            walk(model, n => nodes.push(n));
+            appState.orphanNodes.forEach(n => nodes.push(n));
+
+            let moved = true;
+            let maxIter = 30; // 防止死循环
+            while (moved && maxIter-- > 0) {
+                moved = false;
+                for (let i = 0; i < nodes.length; i++) {
+                    for (let j = i + 1; j < nodes.length; j++) {
+                        const a = nodes[i];
+                        const b = nodes[j];
+                        if (!isOverlap(a, b)) continue;
+
+                        // 计算推开距离
+                        const dx = (a.x - b.x);
+                        const dy = (a.y - b.y);
+                        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                        const overlapX = (a.style.w + b.style.w) / 2 - Math.abs(dx);
+                        const overlapY = (a.style.h + b.style.h) / 2 - Math.abs(dy);
+
+                        const pushFactor = 1.2; // 推开力度
+                        let pushX = 0, pushY = 0;
+                        if (overlapX < overlapY) {
+                            pushX = Math.sign(dx) * (overlapX / 2 + 6) * pushFactor;
+                        } else {
+                            pushY = Math.sign(dy) * (overlapY / 2 + 6) * pushFactor;
+                        }
+
+                        // 推动两个节点
+                        a.x += pushX;
+                        a.y += pushY;
+                        b.x -= pushX;
+                        b.y -= pushY;
+
+                        // 标记为已移动
+                        moved = true;
+                    }
+                }
+            }
+        }
+        document.getElementById('btnAISummary').onclick = async () => {
+            const text = document.getElementById('aiInput').value;
+            if (!text.trim()) return alert('请输入内容');
+
+            // 调用你的 AI 接口（示例用 fetch）
+            const res = await fetch('/api/ai-summary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text })
+            });
+
+            const json = await res.json();
+
+            if (json && json.id && json.text) {
+                // 导入到 MindFlow
+                commitHistory('AI 导入导图');
+                model = json;
+                appState.selected.clear();
+                renderAll();
+                setStatus('AI 导图已生成！');
+            } else {
+                alert('AI 返回格式错误');
+            }
+        };
+        /* ===== 新增：合并导入功能 ===== */
+        /* ✅ 修正版：合并导入 JSON（避免根冲突 + 自动右移） */
+        function mergeImportJSON() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'application/json';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                try {
+                    const text = await file.text();
+                    const subModel = JSON.parse(text);
+
+                    const targetId = currentId();
+                    const parent = findById(targetId);
+                    if (!parent) return alert('请先选中一个节点作为父节点');
+
+                    commitHistory('merge import JSON');
+
+                    // 深拷贝子图所有 children
+                    const childrenToAdd = JSON.parse(JSON.stringify(subModel.children || []));
+
+                    // 计算偏移：当前节点右侧 200px
+                    const offsetX = 200;
+                    const baseY = parent.node.y;
+
+                    // 递归偏移所有子节点坐标
+                    const applyOffset = (nodes, dx, dyBase) => {
+                        nodes.forEach(n => {
+                            n.x = (n.x || 0) + dx;
+                            n.y = (n.y || 0) + dyBase;
+                            if (n.children) applyOffset(n.children, dx, dyBase);
+                        });
+                    };
+
+                    applyOffset(childrenToAdd, offsetX, 0);
+
+                    // 添加到当前节点
+                    parent.node.children = parent.node.children || [];
+                    parent.node.children.push(...childrenToAdd);
+                    parent.node.collapsed = false;
+
+                    renderAll();
+                    setStatus(`已合并 ${childrenToAdd.length} 个子节点到右侧`);
+                } catch (err) {
+                    alert('合并失败：' + err.message);
+                }
+            };
+            input.click();
+        }
+
+        /* 添加按钮到工具栏 */
+        document.addEventListener('DOMContentLoaded', () => {
+            const toolbar = document.querySelector('.toolbar');
+            const btnMerge = document.createElement('button');
+            btnMerge.className = 'btn';
+            btnMerge.textContent = '合并导入 JSON';
+            btnMerge.onclick = mergeImportJSON;
+            toolbar.appendChild(btnMerge);
+        });
+        document.addEventListener('click', e => {
+            if (e.target && e.target.id === 'btnSelectSubtree') {
+                const nodeId = appState.editing;          // 当前正在编辑的节点
+                if (!nodeId) return;
+
+                // 清空旧选中
+                appState.selected.clear();
+
+                // 把当前节点加入
+                appState.selected.add(nodeId);
+
+                // 递归把全部后代也加入
+                const collectIds = (n) => {
+                    if (n.children) {
+                        n.children.forEach(c => {
+                            appState.selected.add(c.id);
+                            collectIds(c);
+                        });
+                    }
+                };
+                const root = findById(nodeId)?.node;
+                if (root) collectIds(root);
+
+                // 立即刷新视图
+                renderNodes();
+                setStatus(`已选中 ${appState.selected.size} 个节点，可整体拖动`);
+                hidePanel();  // 关闭面板
+            }
+        });
+        /*****************************************************************
+*  1. 给面板添加「全选子节点」按钮
+*****************************************************************/
+        const oldShowPanel = window.showPanel;
+        window.showPanel = function (x, y, node) {
+            oldShowPanel(x, y, node);
+
+            // 找到“修改父节点”所在的行
+            const changeBtn = document.getElementById('pChangeParent');
+            if (!changeBtn) return; // 保险
+
+            // 如果按钮已存在则跳过
+            if (changeBtn.parentElement.querySelector('#btnSelectSubtree')) return;
+
+            // 创建按钮
+            const btn = document.createElement('button');
+            btn.className = 'btn';
+            btn.id = 'btnSelectSubtree';
+            btn.textContent = '全选子节点';
+            btn.onclick = () => {
+                selectSubtree(node.id);
+                hidePanel();
+            };
+
+            // 插入到“修改父节点”按钮后面
+            changeBtn.after(btn);
+        };
+
+        /*****************************************************************
+         *  2. 选中节点+所有后代，并进入“整体拖动”模式
+         *****************************************************************/
+        function selectSubtree(rootId) {
+            appState.selected.clear();
+
+            // 根节点
+            appState.selected.add(rootId);
+
+            // 递归后代
+            const collect = (n) => {
+                if (n.children) {
+                    n.children.forEach(c => {
+                        appState.selected.add(c.id);
+                        collect(c);
+                    });
+                }
+            };
+            const r = findById(rootId);
+            if (r) collect(r.node);
+
+            // 进入“整体拖动”状态
+            appState.draggingSubtree = true;
+            renderNodes();
+            setStatus(`已选中 ${appState.selected.size} 个节点，拖动任意一个即可整体移动`);
+        }
+
+        /*****************************************************************
+         *  3. 修改节点点击逻辑：整体拖动期间不重新选中
+         *****************************************************************/
+        const oldOnNodeMouseDown = window.onNodeMouseDown;
+        window.onNodeMouseDown = function (e) {
+            // 如果正处于整体拖动模式
+            if (appState.draggingSubtree) {
+                e.stopPropagation();           // 不再触发旧逻辑
+                const gid = e.currentTarget.dataset.id;
+                if (!appState.selected.has(gid)) return; // 仅处理已选节点
+
+                // 开始整体拖拽
+                const worldPos = toWorld(
+                    e.clientX - stage.getBoundingClientRect().left,
+                    e.clientY - stage.getBoundingClientRect().top
+                );
+                appState.dragging = { ids: [...appState.selected], start: worldPos };
+                window.addEventListener('mousemove', onSubtreeDragMove);
+                window.addEventListener('mouseup', onSubtreeDragEnd, { once: true });
+                return;
+            }
+
+            // 否则走原来的逻辑
+            oldOnNodeMouseDown.call(this, e);
+        };
+
+        /*****************************************************************
+         *  4. 整体拖拽实现：批量移动坐标
+         *****************************************************************/
+        function onSubtreeDragMove(e) {
+            if (!appState.dragging) return;
+            const wp = toWorld(
+                e.clientX - stage.getBoundingClientRect().left,
+                e.clientY - stage.getBoundingClientRect().top
+            );
+            const dx = wp.x - appState.dragging.start.x;
+            const dy = wp.y - appState.dragging.start.y;
+
+            appState.dragging.ids.forEach(id => {
+                const r = findById(id);
+                if (r) {
+                    r.node.x += dx;
+                    r.node.y += dy;
+                    r.node.__manual = true; // 标记为手动位置
+                }
+            });
+            appState.dragging.start = wp;
+            renderEdges();
+            renderNodes();
+            updateMiniMap();
+        }
+
+        function onSubtreeDragEnd() {
+            commitHistory('drag subtree');
+            window.removeEventListener('mousemove', onSubtreeDragMove);
+            appState.dragging = null;
+            appState.draggingSubtree = false; // 退出整体拖动模式
+            setStatus('子树移动完成');
+        }
+
+        /*****************************************************************
+         *  5. Esc 键取消整体拖动模式
+         *****************************************************************/
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                appState.draggingSubtree = false;
+                setStatus('已退出整体拖动模式');
+            }
+        });
+        // 判断节点是否被某个折叠祖先隐藏
+        function isNodeHiddenByAncestor(node) {
+            let p = findParent(node);
+            while (p) {
+                if (p.node && p.node.collapsed) return true;   // 加 p.node 保护
+                p = findParent(p.node);
+            }
+            return false;
+        }
+
+        // 返回第一个未折叠祖先节点对象
+        function firstUnCollapsedAncestor(node) {
+            let p = findParent(node);
+            while (p) {
+                if (p.node && !p.node.collapsed) return p.node;
+                p = findParent(p.node);
+            }
+            return null;
+        }
+
+        // 通用：给定子节点，找到父节点信息
+        function findParent(childNode) {
+            let res = null;
+            walk(model, (n, parent) => {
+                if (n === childNode) res = { node: parent };
+            });
+            return res;   // 可能返回 null
+        }
+        /* ===== 1. 平行排布开关 ===== */
+        let parallelLayout = false;   // 是否处于平行排布
+
+        /* 平行排布计算函数 */
+        function layoutChildrenParallel(parent) {
+            const gap = 40;              // 上下间距
+            const totalH = parent.children.reduce((s, c) => s + (c.style?.h || 28) + gap, 0) - gap;
+            let curY = parent.y - totalH / 2;
+
+            parent.children.forEach(c => {
+                c.x = parent.x + 160;      // 统一水平位置，可随意改
+                c.y = curY + (c.style?.h || 28) / 2;
+                curY += (c.style?.h || 28) + gap;
+            });
+        }
+
+        /* 键盘监听：Y 键切换 */
+        document.addEventListener('keydown', e => {
+            if (e.key.toLowerCase() !== 'y' || e.metaKey || e.ctrlKey) return;
+            e.preventDefault();
+
+            const r = findById(currentId());
+            if (!r || !r.node.children?.length) return;
+
+            parallelLayout = !parallelLayout;
+
+            if (parallelLayout) {
+                layoutChildrenParallel(r.node);
+                resolveOverlaps();         // 防重叠
+                renderAll();
+                setStatus('已切换为平行排布');
+            } else {
+                renderAll();               // 回退自动树形布局
+                setStatus('已恢复树形布局');
+            }
+        });
+
+        let autoLayoutEnabled = false;
+
+        const btnAutoLayout = document.getElementById('btnAutoLayout');
+        btnAutoLayout.onclick = () => {
+            autoLayoutEnabled = !autoLayoutEnabled;
+            btnAutoLayout.classList.toggle('active', autoLayoutEnabled);
+            setStatus('自动整理已' + (autoLayoutEnabled ? '开启' : '关闭'));
+        };
+
+        /* 覆盖原 toggleCollapse（保留原有逻辑，追加自动整理） */
+        const oldToggleCollapse = window.toggleCollapse;
+        window.toggleCollapse = function (id) {
+            oldToggleCollapse(id);          // 先执行原折叠/展开
+            if (!autoLayoutEnabled) return; // 开关关闭就结束
+
+            /* 收集当前节点及其所有后代节点 id */
+            const ids = [];
+            function collectIds(node) {
+                ids.push(node.id);
+                (node.children || []).forEach(collectIds);
+            }
+            const r = findById(id);
+            if (r) collectIds(r.node);
+
+            /* 重置这些节点的 __manual 标记（相当于 Shift+R） */
+            ids.forEach(id => {
+                const t = findById(id);
+                if (t) delete t.node.__manual;
+            });
+
+            /* 重新布局一次 */
+            commitHistory('auto reset layout');
+            renderAll();
+        };
+        /* ========= 界面 ▼ 下拉 ========= */
+        const uiBtn = document.getElementById('UIMenu');
+        const uiPanel = document.getElementById('uiDropdown');
+
+        /* 点击按钮开关下拉 */
+        uiBtn.addEventListener('click', () => {
+            uiPanel.style.display = uiPanel.style.display === 'none' ? 'block' : 'none';
+        });
+
+        /* 点击空白关闭下拉 */
+        window.addEventListener('click', e => {
+            if (!uiBtn.contains(e.target) && !uiPanel.contains(e.target)) {
+                uiPanel.style.display = 'none';
+            }
+        });
+
+        /* 把旧按钮事件挂到新按钮（保持原有逻辑） */
+        ['Note', 'Link', 'Image', 'Task', 'Tag', 'Style'].forEach(name => {
+            const oldBtn = document.getElementById('btn' + name);
+            const newBtn = document.getElementById('btn' + name + 'UI');
+            if (oldBtn && newBtn) newBtn.onclick = oldBtn.onclick;
+        });
+        /* ========== 容量保护 start ========== */
+        const MAX_LS_SIZE = 5_200_000;          // 5 MB 留一点余量
+
+        /**
+         * 尝试把当前导图保存到库；超限则自动导出并提示
+         * @param {boolean} silent  true=静默失败（用于自动保存场景）
+         */
+        function trySaveToLibrary(silent = false) {
+            const lib = loadLibrary();
+            const snapshot = deepCopy(model);
+            const entry = {
+                id: appState.currentMapId || rndId(),
+                name: model.text || '未命名导图',
+                model: snapshot,
+                created: appState.currentMapId ? lib.find(m => m.id === appState.currentMapId)?.created : Date.now(),
+                updated: Date.now()
+            };
+
+            // 计算即将写入的 JSON 体积（UTF-8 字节数）
+            const raw = JSON.stringify(entry.model);
+            const size = new Blob([raw]).size;
+
+            if (size > MAX_LS_SIZE) {
+                // 超限：自动导出
+                const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `mindflow-${Date.now()}.json`;
+                a.click();
+
+                if (!silent) {
+                    alert('导图体积过大，已超出 localStorage 容量限制，已自动导出 JSON 文件，请妥善保存！');
+                }
+                setStatus('超限已自动导出');
+                return false;          // 告诉调用方“没写库”
+            }
+
+            // 正常写库
+            const idx = lib.findIndex(m => m.id === entry.id);
+            if (idx >= 0) lib[idx] = entry; else lib.unshift(entry);
+            saveLibrary(lib);
+            appState.currentMapId = entry.id;
+            renderLibrary();
+            setStatus('已保存到库');
+            return true;
+        }
+
+        /* 替换原来的 saveCurrentMap() 入口 */
+        $('#btnSaveMap').onclick = () => trySaveToLibrary(false);
+        /* ========== 容量保护 end ========== */
+
+    </script>
+</body>
+</html>
+
+
+
