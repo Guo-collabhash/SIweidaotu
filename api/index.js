@@ -372,9 +372,22 @@ app.post('/api/upload/complete', async (req, res) => {
     // 解析JSON数据
     let parsedData;
     try {
+      // 首先检查mergedData是否存在且有效
+      if (!mergedData) {
+        return res.status(400).json({ error: '上传的数据为空或undefined' });
+      }
+      
+      // 尝试解析JSON
       parsedData = JSON.parse(mergedData);
     } catch (e) {
-      return res.status(400).json({ error: '无效的JSON数据' });
+      console.error('JSON解析错误:', e);
+      // 提供更详细的错误信息
+      return res.status(400).json({
+        error: '无效的JSON数据',
+        details: e.message,
+        dataType: typeof mergedData,
+        dataLength: mergedData ? mergedData.length : 0
+      });
     }
     
     // 保存到数据库
