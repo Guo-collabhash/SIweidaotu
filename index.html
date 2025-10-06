@@ -2036,16 +2036,165 @@
             const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `mindflow-${Date.now()}.json`; a.click();
         };
         
-        // 保存到数据库功能
-        $('#btnSaveToDb').onclick = async () => {
+        // 创建进度条元素
+        function createProgressBar() {
+            let progressBar = document.getElementById('uploadProgress');
+            if (!progressBar) {
+                progressBar = document.createElement('div');
+                progressBar.id = 'uploadProgress';
+                progressBar.style.position = 'fixed';
+                progressBar.style.top = '0';
+                progressBar.style.left = '0';
+                progressBar.style.width = '100%';
+                progressBar.style.height = '4px';
+                progressBar.style.backgroundColor = 'rgba(0,0,0,0.2)';
+                progressBar.style.zIndex = '9999';
+                progressBar.style.display = 'none';
+                progressBar.innerHTML = `
+                    <div id="progressFill" style="
+                        width: 0%;
+                        height: 100%;
+                        background: linear-gradient(90deg, var(--accent), var(--accent2));
+                        transition: width 0.3s ease;
+                    "></div>
+                    <div id="progressText" style="
+                        position: absolute;
+                        top: 10px;
+                        right: 20px;
+                        background: var(--panel);
+                        color: var(--text);
+                        padding: 4px 8px;
+                        border-radius: 4px;
+                        font-size: 12px;
+                        box-shadow: var(--shadow);
+                    "></div>
+                `;
+                document.body.appendChild(progressBar);
+            }
+            return progressBar;
+        }
+
+        // 更新进度显示
+        function updateProgress(percent) {
+            const progressBar = createProgressBar();
+            const fill = progressBar.querySelector('#progressFill');
+            const text = progressBar.querySelector('#progressText');
+            
+            progressBar.style.display = 'block';
+            fill.style.width = `${percent}%`;
+            text.textContent = `${Math.round(percent)}%`;
+        }
+
+        // 隐藏进度条
+        function hideProgress() {
+            const progressBar = document.getElementById('uploadProgress');
+            if (progressBar) {
+                progressBar.style.display = 'none';
+            }
+        }
+
+        // 分块上传到数据库
+        async function saveToDatabaseWithChunking(name, data, userId) {
             try {
-                const name = prompt('请输入思维导图名称:', `思维导图_${Date.now()}`);
-                if (!name) return;
+                setStatus('正在准备上传...');
                 
+                // 转换数据为JSON字符串
+                const jsonData = JSON.stringify(data);
+                const totalSize = new Blob([jsonData]).size;
+                
+                // 如果文件很小，直接使用原来的方式上传
+                if (totalSize < 1024 * 1024) { // 小于1MB
+                    return saveToDatabaseDirectly(name, data, userId);
+                }
+                
+                // 分块大小为1MB
+                const chunkSize = 1024 * 1024;
+                const chunkCount = Math.ceil(totalSize / chunkSize);
+                
+                // 初始化上传任务
+                const initResponse = await fetch('/api/upload/init', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name,
+                        userId,
+                        totalSize,
+                        chunkCount
+                    })
+                });
+                
+                const initResult = await initResponse.json();
+                if (!initResponse.ok) {
+                    throw new Error(initResult.error || '初始化上传任务失败');
+                }
+                
+                const uploadId = initResult.uploadId;
+                
+                // 上传每个块
+                for (let i = 0; i < chunkCount; i++) {
+                    const start = i * chunkSize;
+                    const end = Math.min(start + chunkSize, jsonData.length);
+                    const chunkData = jsonData.substring(start, end);
+                    
+                    setStatus(`正在上传第 ${i + 1}/${chunkCount} 块...`);
+                    updateProgress((i / chunkCount) * 100);
+                    
+                    const chunkResponse = await fetch('/api/upload/chunk', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            uploadId,
+                            chunkIndex: i,
+                            chunkData
+                        })
+                    });
+                    
+                    const chunkResult = await chunkResponse.json();
+                    if (!chunkResponse.ok) {
+                        throw new Error(chunkResult.error || `上传第 ${i + 1} 块失败`);
+                    }
+                }
+                
+                // 完成上传
+                setStatus('正在完成上传...');
+                updateProgress(100);
+                
+                const completeResponse = await fetch('/api/upload/complete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ uploadId })
+                });
+                
+                const completeResult = await completeResponse.json();
+                hideProgress();
+                
+                if (completeResponse.ok) {
+                    setStatus('思维导图已成功保存到数据库！');
+                    alert('保存成功！');
+                    return true;
+                } else {
+                    setStatus(`保存失败: ${completeResult.error}`);
+                    alert(`保存失败: ${completeResult.error}`);
+                    return false;
+                }
+            } catch (error) {
+                hideProgress();
+                setStatus(`保存失败: ${error.message}`);
+                alert(`保存失败: ${error.message}`);
+                return false;
+            }
+        }
+
+        // 直接上传到数据库（用于小文件）
+        async function saveToDatabaseDirectly(name, data, userId) {
+            try {
                 setStatus('正在保存到数据库...');
-                
-                // 当前用户ID（如果有登录的话）
-                const userId = localStorage.getItem('userId') || null;
                 
                 // 发送请求到后端API
                 const response = await fetch('/api/save-mindmap', {
@@ -2055,7 +2204,7 @@
                     },
                     body: JSON.stringify({
                         name: name,
-                        data: model,
+                        data: data,
                         userId: userId
                     })
                 });
@@ -2065,11 +2214,32 @@
                 if (response.ok) {
                     setStatus('思维导图已成功保存到数据库！');
                     alert('保存成功！');
+                    return true;
                 } else {
                     setStatus(`保存失败: ${result.error}`);
                     alert(`保存失败: ${result.error}`);
+                    return false;
                 }
             } catch (error) {
+                setStatus(`保存失败: ${error.message}`);
+                alert(`保存失败: ${error.message}`);
+                return false;
+            }
+        }
+
+        // 保存到数据库功能
+        $('#btnSaveToDb').onclick = async () => {
+            try {
+                const name = prompt('请输入思维导图名称:', `思维导图_${Date.now()}`);
+                if (!name) return;
+                
+                // 当前用户ID（如果有登录的话）
+                const userId = localStorage.getItem('userId') || null;
+                
+                // 使用分块上传功能
+                await saveToDatabaseWithChunking(name, model, userId);
+            } catch (error) {
+                hideProgress();
                 setStatus(`保存失败: ${error.message}`);
                 alert(`保存失败: ${error.message}`);
             }
