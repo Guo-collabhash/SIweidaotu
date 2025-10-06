@@ -2,7 +2,11 @@
 <html lang="zh-CN">
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <!-- 优化viewport设置，适配各种手机屏幕，包括刘海屏和底部安全区域 -->
+    <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+    <!-- 添加苹果设备特定的安全区域设置 -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>MindFlow — 极简强大的思维导图</title>
     <style>
         :root {
@@ -45,12 +49,160 @@
             --tag-text: #274690;
         }
 
+        /* 基础样式设置 */
         html, body {
             height: 100%;
             margin: 0;
             background: var(--bg);
             color: var(--text);
             font: 14px/1.25 system-ui,Segoe UI,Roboto,Helvetica,Arial;
+            /* 防止文字缩放 */
+            -webkit-text-size-adjust: 100%;
+            -moz-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+            text-size-adjust: 100%;
+            /* 禁用触摸高亮 */
+            -webkit-tap-highlight-color: transparent;
+            /* 优化字体渲染 */
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* 安全区域适配 */
+        .safe-area {
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+            padding-left: env(safe-area-inset-left);
+            padding-right: env(safe-area-inset-right);
+        }
+
+        /* 画布容器适配 */
+        #app {
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            height: 100%;
+            /* 应用安全区域适配 */
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+            box-sizing: border-box;
+        }
+
+        /* 移动端适配媒体查询 */
+        @media screen and (max-width: 768px) {
+            /* 优化按钮大小和间距 */
+            .toolbar {
+                padding: 12px 15px;
+                gap: 8px;
+            }
+            
+            .btn, .seg > button {
+                padding: 10px 12px;
+                font-size: 16px;
+                min-width: 44px;
+                min-height: 44px;
+            }
+            
+            /* 优化输入框和选择框 */
+            select, input[type="color"] {
+                padding: 10px 12px;
+                font-size: 16px;
+                min-height: 44px;
+            }
+            
+            /* 优化节点大小和文本 */
+            .node text {
+                font-size: 16px;
+            }
+            
+            /* 优化画布交互区域 */
+            #stage {
+                touch-action: none;
+            }
+        }
+
+        /* 横屏适配 */
+        @media screen and (orientation: landscape) {
+            .toolbar {
+                flex-wrap: wrap;
+            }
+        }
+
+        /* 高分辨率屏幕优化 */
+        @media (-webkit-device-pixel-ratio: 2), (device-pixel-ratio: 2) {
+            .node {
+                vector-effect: non-scaling-stroke;
+            }
+        }
+        
+        /* 手机端浮动操作面板样式 */
+        .mobile-actions {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 999;
+            display: none;
+        }
+        
+        .mobile-actions-container {
+            display: flex;
+            gap: 12px;
+            background: var(--panel);
+            border-radius: 30px;
+            padding: 8px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+        }
+        
+        .mobile-action-btn {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            border: none;
+            background: transparent;
+            color: var(--text);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+        
+        .mobile-action-btn:hover {
+            background: var(--muted);
+            transform: scale(1.05);
+        }
+        
+        .mobile-action-btn:active {
+            transform: scale(0.95);
+        }
+        
+        /* 锁定节点按钮的特殊状态 */
+        .mobile-action-btn.locked {
+            color: var(--accent);
+        }
+        
+        /* 响应式显示 */
+        @media screen and (max-width: 768px) {
+            .mobile-actions {
+                display: block;
+            }
+        }
+        
+        /* 横屏模式下调整位置 */
+        @media screen and (orientation: landscape) {
+            .mobile-actions {
+                bottom: 10px;
+            }
+            
+            .mobile-actions-container {
+                gap: 8px;
+            }
+            
+            .mobile-action-btn {
+                width: 48px;
+                height: 48px;
+            }
         }
 
         #app {
@@ -472,10 +624,16 @@
                 <button id="btnDelete">删除(/)</button>
                 <button class="btn" id="btnOrphan">空白节点</button>
             </div>
-            <div class="seg">
+            <!-- 隐藏原来的布局按钮 -->
+            <div class="seg" style="display: none;">
                 <button id="btnLayoutRight">布局: 右(1)</button>
                 <button id="btnLayoutBoth">左右(2)</button>
                 <button id="btnLayoutRadial">放射(3)</button>
+            </div>
+            
+            <!-- 新增：节点展开/隐藏按钮 -->
+            <div class="seg">
+                <button id="btnToggleCollapse" title="展开/隐藏子节点 (空格键)">展开/隐藏子节点</button>
             </div>
             <div class="seg">
                 <button id="btnUndo">撤销</button>
@@ -545,7 +703,46 @@
     </div>
 
     <!-- 浮动面板（复用） -->
-    <div id="panel" class="floating" style="display:none"></div>
+        <div id="panel" class="floating" style="display:none"></div>
+        
+        <!-- 手机端浮动操作面板 -->
+        <div id="mobileActions" class="mobile-actions" style="display:none;">
+            <div class="mobile-actions-container">
+                <button id="mobileBtnToggleCollapse" class="mobile-action-btn" title="折叠/展开节点">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+                <button id="mobileBtnLockNodes" class="mobile-action-btn" title="锁定/解锁节点">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor" stroke-width="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </button>
+                <button id="mobileBtnDeleteMode" class="mobile-action-btn" title="切换删除模式">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M3 6h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M8 6V4c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M12 18.5v-10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M9 14.5l6 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <button id="mobileBtnResetSelected" class="mobile-action-btn" title="重置选中节点">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 4v4l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M21 3L16 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+                <button id="mobileBtnResetAll" class="mobile-action-btn" title="重置所有手动布局节点">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M3 12a9 9 0 1 0 18 0 9 9 0 1 0-18 0" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M16.24 7.76a5 5 0 0 1 0 7.07" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M7.76 16.24a5 5 0 0 1-7.07-7.07" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
     <div id="shortcutsModal" class="libraryOverlay" style="display:none">
         <div class="libraryBox" style="max-width:480px">
             <h3 style="margin:0 0 10px">快捷键一览</h3>
@@ -2146,9 +2343,15 @@
         $('#btnAddParent').onclick = addParent;
         $('#btnAddChild').onclick = addChild;
         $('#btnDelete').onclick = removeSelected;
+        // 保留原有的布局切换功能，但按钮已隐藏
         $('#btnLayoutRight').onclick = () => { appState.layout = 'right'; renderAll(); };
         $('#btnLayoutBoth').onclick = () => { appState.layout = 'both'; renderAll(); };
         $('#btnLayoutRadial').onclick = () => { appState.layout = 'radial'; renderAll(); };
+        
+        // 新增：节点展开/隐藏按钮的点击事件
+        $('#btnToggleCollapse').onclick = () => {
+            toggleCollapse(currentId());
+        };
         $('#btnUndo').onclick = undo; $('#btnRedo').onclick = redo;
         $('#btnFit').onclick = () => fitView();
         $('#btnCenter').onclick = () => centerOn(model.id);
@@ -2314,6 +2517,215 @@
         stage.addEventListener('mousedown', onMouseDown);
         window.addEventListener('mousemove', onMouseMove);
         window.addEventListener('mouseup', onMouseUp);
+        
+        /* ---------------------- 手机端浮动操作面板事件 ---------------------- */
+        // 折叠/展开节点按钮
+        $('#mobileBtnToggleCollapse').addEventListener('click', function() {
+            if (!appState.editing) {
+                const id = currentId();
+                if (id) {
+                    toggleCollapse(id);
+                    setStatus('已折叠/展开节点');
+                } else {
+                    setStatus('请先选中一个节点');
+                }
+            }
+        });
+        
+        // 锁定/解锁节点按钮
+        $('#mobileBtnLockNodes').addEventListener('click', function() {
+            appState.lockNodes = !appState.lockNodes;
+            const btn = document.getElementById('mobileBtnLockNodes');
+            if (appState.lockNodes) {
+                btn.classList.add('locked');
+                setStatus('节点已锁定');
+            } else {
+                btn.classList.remove('locked');
+                setStatus('节点已解锁');
+            }
+        });
+        
+        // 切换删除模式按钮
+        $('#mobileBtnDeleteMode').addEventListener('click', function() {
+            appState.deleteMode = appState.deleteMode === 'keep' ? 'all' : 'keep';
+            setStatus('删除模式：' + (appState.deleteMode === 'keep' ? '保留子节点' : '连同子节点'));
+        });
+        
+        // 重置选中节点按钮
+        $('#mobileBtnResetSelected').addEventListener('click', function() {
+            const ids = Array.from(appState.selected);
+            if (ids.length === 0) {
+                setStatus('请先选中节点');
+                return;
+            }
+            
+            if (confirm(`重置 ${ids.length} 个节点到默认位置？`)) {
+                ids.forEach(id => {
+                    const r = findById(id);
+                    if (r) {
+                        r.node.__manual = false; // 清除手动标记
+                    }
+                });
+                
+                commitHistory('reset selected nodes');
+                renderAll();
+                setStatus('已重置选中节点');
+            }
+        });
+        
+        // 重置所有手动布局节点按钮
+        $('#mobileBtnResetAll').addEventListener('click', function() {
+            const allNodes = [];
+            walk(model, (n) => {
+                if (n.__manual) allNodes.push(n);
+            });
+            
+            if (allNodes.length === 0) {
+                setStatus('没有节点需要重置');
+                return;
+            }
+            
+            if (confirm(`将重置 ${allNodes.length} 个节点的位置，确定吗？`)) {
+                allNodes.forEach(n => {
+                    n.__manual = false; // 清除手动标记
+                });
+                
+                commitHistory('reset all manual layout');
+                renderAll();
+                setStatus('已恢复默认布局');
+            }
+        });
+        
+        /* ---------------------- 触摸屏事件 ---------------------- */
+        // 触摸屏移动画布
+        let touchStart = null;
+        let lastTouches = null;
+        let lastDistance = 0;
+        let lastScale = 1;
+        let touchStartTime = 0;
+        let isDragging = false;
+        
+        stage.addEventListener('touchstart', function(e) {
+            // 记录触摸开始时间，用于区分点击和拖动
+            touchStartTime = Date.now();
+            isDragging = false;
+            
+            if (e.touches.length === 1) {
+                // 单指触摸：开始拖动
+                const rect = stage.getBoundingClientRect();
+                const x = e.touches[0].clientX - rect.left;
+                const y = e.touches[0].clientY - rect.top;
+                
+                touchStart = {
+                    x: x,
+                    y: y,
+                    tx: appState.tx,
+                    ty: appState.ty
+                };
+            } else if (e.touches.length === 2) {
+                // 双指触摸：开始缩放
+                lastTouches = [e.touches[0], e.touches[1]];
+                const dx = lastTouches[0].clientX - lastTouches[1].clientX;
+                const dy = lastTouches[0].clientY - lastTouches[1].clientY;
+                lastDistance = Math.sqrt(dx * dx + dy * dy);
+                lastScale = appState.scale;
+                
+                // 双指操作时阻止默认行为
+                e.preventDefault();
+            }
+        }, { passive: false });
+        
+        stage.addEventListener('touchmove', function(e) {
+            
+            if (e.touches.length === 1 && touchStart) {
+                // 单指拖动
+                const rect = stage.getBoundingClientRect();
+                const x = e.touches[0].clientX - rect.left;
+                const y = e.touches[0].clientY - rect.top;
+                
+                const dx = x - touchStart.x;
+                const dy = y - touchStart.y;
+                
+                // 只有在移动超过一定距离或时间超过阈值时才认为是拖动
+                const distanceMoved = Math.sqrt(dx * dx + dy * dy);
+                const timePassed = Date.now() - touchStartTime;
+                
+                if (distanceMoved > 5 || timePassed > 100) {
+                    isDragging = true;
+                    // 拖动时阻止默认行为
+                    e.preventDefault();
+                    
+                    appState.tx = touchStart.tx + dx;
+                    appState.ty = touchStart.ty + dy;
+                    
+                    updateView();
+                    updateMiniMap();
+                }
+            } else if (e.touches.length === 2 && lastTouches && lastDistance > 0) {
+                // 双指缩放
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // 阻止默认行为
+                e.preventDefault();
+                
+                // 计算缩放比例
+                const scaleFactor = distance / lastDistance;
+                const newScale = Math.max(0.1, Math.min(10, lastScale * scaleFactor));
+                
+                if (newScale !== appState.scale) {
+                    // 计算触摸中心点
+                    const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                    const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                    const rect = stage.getBoundingClientRect();
+                    const localCenterX = centerX - rect.left;
+                    const localCenterY = centerY - rect.top;
+                    
+                    // 调整平移以保持缩放中心点不变
+                    const scaleChange = newScale / appState.scale;
+                    appState.tx = localCenterX - scaleChange * (localCenterX - appState.tx);
+                    appState.ty = localCenterY - scaleChange * (localCenterY - appState.ty);
+                    
+                    appState.scale = newScale;
+                    
+                    updateView();
+                    updateMiniMap();
+                    setStatus(`缩放: ${Math.round(appState.scale * 100)}%`);
+                }
+            }
+        }, { passive: false });
+        
+        stage.addEventListener('touchend', function(e) {
+            // 重置触摸状态
+            if (e.touches.length === 0) {
+                // 如果没有进行拖动，则不阻止事件，允许点击事件触发
+                if (!isDragging) {
+                    // 为了让点击事件能够触发，我们在这里不做任何阻止默认行为的操作
+                    // 系统会自动将触摸事件转换为鼠标事件（如click）
+                }
+                
+                touchStart = null;
+                lastTouches = null;
+                lastDistance = 0;
+                isDragging = false;
+            } else if (e.touches.length === 1) {
+                // 从双指变为单指
+                const rect = stage.getBoundingClientRect();
+                const x = e.touches[0].clientX - rect.left;
+                const y = e.touches[0].clientY - rect.top;
+                
+                touchStart = {
+                    x: x,
+                    y: y,
+                    tx: appState.tx,
+                    ty: appState.ty
+                };
+                
+                lastTouches = null;
+                lastDistance = 0;
+            }
+        });
 
         /* ---------------------- 底部信息 ---------------------- */
         function updateFooter() {
