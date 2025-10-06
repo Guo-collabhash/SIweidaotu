@@ -168,14 +168,14 @@ app.post('/api/save-mindmap', async (req, res) => {
   }
 });
 
-// 获取用户的所有思维导图（有用户ID）
+// 获取用户的所有思维导图基本信息（有用户ID）
 app.get('/api/mindmaps/user/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     
     const { data, error } = await supabase
       .from('mindmaps')
-      .select('*')
+      .select('id, name, created_at, user_id') // 只选择基本信息字段
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
     
@@ -189,12 +189,12 @@ app.get('/api/mindmaps/user/:userId', async (req, res) => {
   }
 });
 
-// 获取所有思维导图（无用户ID）
+// 获取所有思维导图基本信息（无用户ID）
 app.get('/api/mindmaps', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('mindmaps')
-      .select('*')
+      .select('id, name, created_at, user_id') // 只选择基本信息字段
       .order('created_at', { ascending: false });
     
     if (error) {
@@ -202,6 +202,27 @@ app.get('/api/mindmaps', async (req, res) => {
     }
     
     res.status(200).json({ mindmaps: data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 根据ID获取单个思维导图的完整数据
+app.get('/api/mindmaps/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const { data, error } = await supabase
+      .from('mindmaps')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (error) {
+      throw error;
+    }
+    
+    res.status(200).json({ mindmap: data });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

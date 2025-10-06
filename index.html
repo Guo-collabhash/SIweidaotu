@@ -2163,18 +2163,33 @@
                         
                         mapItem.addEventListener('click', async () => {
                             try {
-                                setStatus('正在导入思维导图...');
-                                // 解析存储在数据库中的JSON数据
-                                const mapData = JSON.parse(map.data);
+                                setStatus('正在获取思维导图详细数据...');
                                 
-                                // 打开并渲染选中的思维导图
-                                model = deepCopy(mapData);
-                                appState.currentMapId = null; // 清除本地库的关联
-                                appState.selected.clear();
-                                commitHistory('import from database');
-                                renderAll();
-                                setStatus('已从数据库导入: ' + map.name);
+                                // 通过新的API获取完整的思维导图数据
+                                const mapDetailResponse = await fetch(`/api/mindmaps/${map.id}`, {
+                                    method: 'GET',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    }
+                                });
                                 
+                                const mapDetailResult = await mapDetailResponse.json();
+                                
+                                if (mapDetailResponse.ok && mapDetailResult.mindmap) {
+                                    // 解析存储在数据库中的JSON数据
+                                    const mapData = JSON.parse(mapDetailResult.mindmap.data);
+                                     
+                                    // 打开并渲染选中的思维导图
+                                    model = deepCopy(mapData);
+                                    appState.currentMapId = null; // 清除本地库的关联
+                                    appState.selected.clear();
+                                    commitHistory('import from database');
+                                    renderAll();
+                                    setStatus('已从数据库导入: ' + map.name);
+                                } else {
+                                    throw new Error('获取思维导图详细数据失败');
+                                }
+                                 
                                 // 关闭模态框
                                 document.body.removeChild(mapSelect);
                                 alert('导入成功！');
