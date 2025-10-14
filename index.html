@@ -719,6 +719,14 @@
                         <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2"/>
                     </svg>
                 </button>
+                <button id="mobileBtnUploadImage" class="mobile-action-btn" title="上传图片">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <input type="file" id="mobileImageInput" accept="image/*" style="display: none;"/>
                 <button id="mobileBtnDeleteMode" class="mobile-action-btn" title="切换删除模式">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M3 6h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -1111,6 +1119,19 @@
             place(model, 0, 0, 1);
         }
 
+        /* ---------------------- 辅助函数 ---------------------- */
+        // 将文件转换为DataURL
+        function fileToDataURL(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    resolve(e.target.result);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+        
         /* ---------------------- 渲染 ---------------------- */
         function renderAll() {
             autoLayout();
@@ -1159,12 +1180,55 @@
                 if (n.style.border) rect.setAttribute('stroke', n.style.border);
                 node.appendChild(rect);
 
-                // 标题
+                // 标题 - 支持分行显示
                 const title = document.createElementNS(g.namespaceURI, 'text');
                 title.setAttribute('x', 14); title.setAttribute('y', 18);
                 title.setAttribute('class', 'title');
-                title.textContent = (n.style.icon ? (n.style.icon + ' ') : '') + (n.text || '（空）');
+                
+                // 处理文本分行
+                const fullText = (n.style.icon ? (n.style.icon + ' ') : '') + (n.text || '（空）');
+                const words = fullText.split(/[\n\s]+/); // 按空格和换行符分割
+                let currentLine = '';
+                let yPos = 18;
+                
+                for (let i = 0; i < words.length; i++) {
+                    const testLine = currentLine + (currentLine ? ' ' : '') + words[i];
+                    const testText = document.createElementNS(g.namespaceURI, 'text');
+                    testText.textContent = testLine;
+                    document.body.appendChild(testText);
+                    const width = testText.getComputedTextLength();
+                    document.body.removeChild(testText);
+                    
+                    // 如果当前行加上新词超出节点宽度，则换行
+                    if (width > n.style.w - 30 && currentLine) {
+                        const tspan = document.createElementNS(g.namespaceURI, 'tspan');
+                        tspan.setAttribute('x', 14);
+                        tspan.setAttribute('y', yPos);
+                        tspan.textContent = currentLine;
+                        title.appendChild(tspan);
+                        
+                        currentLine = words[i];
+                        yPos += 18; // 行高
+                    } else {
+                        currentLine = testLine;
+                    }
+                }
+                
+                // 添加最后一行
+                const tspan = document.createElementNS(g.namespaceURI, 'tspan');
+                tspan.setAttribute('x', 14);
+                tspan.setAttribute('y', yPos);
+                tspan.textContent = currentLine;
+                title.appendChild(tspan);
+                
                 node.appendChild(title);
+                
+                // 根据文本行数调整节点高度
+                const lineCount = title.querySelectorAll('tspan').length;
+                if (lineCount > 1) {
+                    n.style.h += (lineCount - 1) * 18;
+                    rect.setAttribute('height', n.style.h);
+                }
 
                 // meta 行
                 const meta = document.createElementNS(g.namespaceURI, 'text');
@@ -1557,6 +1621,15 @@
             appState.editing = id;
             const pt = toScreen(r.node.x, r.node.y);
             showPanel(pt.x + 10, pt.y + 10, r.node);
+            
+            // 延迟一小段时间，确保面板已完全渲染，然后自动聚焦标题输入框
+            setTimeout(() => {
+                const titleInput = document.getElementById('pText');
+                if (titleInput) {
+                    titleInput.focus();
+                    titleInput.select(); // 全选现有文本以便快速编辑
+                }
+            }, 50);
         }
         function updateNodeMeta(node, patch) {
             commitHistory('update meta');
@@ -1580,7 +1653,8 @@
 
                         <div class="row"><label>图标</label><input id="pIcon" type="text" value="${escapeHtml(node.style?.icon || '')}" placeholder="如 🚀 或 😀" /></div>
                         <div class="row"><label>链接</label><input id="pLink" type="text" value="${escapeHtml(node.meta?.link || '')}" placeholder="https://..." /></div>
-                        <div class="row"><label>图片</label><input id="pImg" type="text" value="${escapeHtml(node.meta?.img || '')}" placeholder="图片URL 或 拖拽上传" /></div>
+                        <div class="row"><label>图片</label><input id="pImg" type="text" value="${escapeHtml(node.meta?.img || '')}" placeholder="图片URL" /></div>
+                        <div class="row"><label>选择图片</label><input id="pImgFile" type="file" accept="image/*" /></div>
                         <div class="row"><label>图片位置 X</label><input id="pImgX" type="number" value="${node.meta?.imgX || 0}" /></div>
                         <div class="row"><label>图片位置 Y</label><input id="pImgY" type="number" value="${node.meta?.imgY || 0}" /></div>
                         <div class="row"><label>图片宽</label><input id="pImgW" type="number" min="1" value="${node.meta?.imgW || 128}" /></div>
@@ -1616,8 +1690,19 @@
                 if (t != null) $('#pTags').setAttribute('data-tags', t);
             };
             $('#pClearColor').onclick = () => { $('#pFill').value = '#ffffff'; $('#pBorder').value = '#ffffff'; };
-            $('#pClearAll').onclick = () => {
-                $('#pText').value = ''; $('#pIcon').value = ''; $('#pLink').value = ''; $('#pImg').value = ''; $('#pNote').value = '';
+            // 为图片文件选择器添加事件监听
+                        $('#pImgFile').onchange = async function() {
+                            if (this.files && this.files[0]) {
+                                const file = this.files[0];
+                                if (file.type && file.type.startsWith('image/')) {
+                                    const data = await fileToDataURL(file);
+                                    $('#pImg').value = data;
+                                }
+                            }
+                        };
+                        
+                        $('#pClearAll').onclick = () => {
+                $('#pText').value = ''; $('#pIcon').value = ''; $('#pLink').value = ''; $('#pImg').value = ''; $('#pImgFile').value = ''; $('#pNote').value = '';
                 $('#pTask').classList.remove('active'); $('#pTask').textContent = '未启用';
                 $('#pProgress').value = '0'; $('#pProgressLabel').textContent = '0%';
                 $('#pPriority').value = '0'; $('#pTags').setAttribute('data-tags', '');
@@ -2847,6 +2932,38 @@
                 renderAll();
                 setStatus('已恢复默认布局');
             }
+        });
+        
+        // 手机端上传图片按钮
+        $('#mobileBtnUploadImage').addEventListener('click', function() {
+            const id = currentId();
+            if (!id) {
+                setStatus('请先选中一个节点');
+                return;
+            }
+            document.getElementById('mobileImageInput').click();
+        });
+        
+        // 手机端图片选择处理
+        document.getElementById('mobileImageInput').addEventListener('change', async function(e) {
+            const id = currentId();
+            if (!id) return;
+            
+            const file = e.target.files[0];
+            if (file && file.type.startsWith('image/')) {
+                const data = await fileToDataURL(file);
+                const r = findById(id);
+                if (r) {
+                    commitHistory('upload image (mobile)');
+                    r.node.meta.img = data;
+                    r.node.meta.imgX = r.node.x + r.node.style.w; // 默认放在节点右侧
+                    r.node.meta.imgY = r.node.y;
+                    renderAll();
+                    setStatus('图片已上传到节点');
+                }
+            }
+            // 清空input值，允许重复选择同一文件
+            this.value = '';
         });
         
         /* ---------------------- 触摸屏事件 ---------------------- */
